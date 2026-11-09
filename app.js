@@ -1097,9 +1097,10 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
   $("#logout").addEventListener("click", () => sb.auth.signOut());
 
   /* ---------- Authentification ---------- */
-  async function start(session) {
-    $("#login").hidden = !!session; $("#app").hidden = !session;
-    if (!session) return;
+  async function start(session, restored = false) {
+    /* L'interface ne s'affiche qu'une fois le rôle vérifié pour cet espace : rien n'est montré avant. */
+    $("#login").hidden = !!session; $("#app").hidden = true;
+    if (!session) { $("#view").innerHTML = ""; return; }
     $("#who").textContent = session.user.email;
     try {
       /* Rôle : lecture du profil ; sur une base vide, le premier compte connecté devient équipe. */
@@ -1113,20 +1114,24 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
         const { data: created } = await sb.from("profils").insert({ email: session.user.email.toLowerCase(), nom: session.user.email.split("@")[0], role: "admin" }).select().maybeSingle();
         prof = created || null;
       }
-      if (!prof) { $("#view").innerHTML = `<div class="empty"><strong>Aucun rôle n'est attribué à ${esc(session.user.email)}.</strong><br>Demandez à l'équipe du programme de déclarer votre compte (Paramètres → Comptes &amp; rôles) ou d'enregistrer votre adresse sur votre fiche participant.</div>`; $("#nav").hidden = true; $(".topbar").hidden = true; return; }
+      if (!prof) { $("#app").hidden = false; $("#view").innerHTML = `<div class="empty"><strong>Aucun rôle n'est attribué à ${esc(session.user.email)}.</strong><br>Demandez à l'équipe du programme de déclarer votre compte (Paramètres → Comptes &amp; rôles) ou d'enregistrer votre adresse sur votre fiche participant.</div>`; $("#nav").hidden = true; $(".topbar").hidden = true; return; }
       S.me = prof; S.role = prof.role;
       const PAGE = { admin: "admin.html", intervenant: "prof.html", etudiant: "etudiant.html" };
       const allowed = S.role === "admin" || (S.role === "intervenant" && SPACE === "prof") || (S.role === "etudiant" && SPACE === "etudiant");
       if (!allowed) { location.replace(PAGE[S.role]); return; }
       if (isEtudiant()) $(".topbar .scope").hidden = true;
       const ROLE_LBL = { admin: "équipe", intervenant: "intervenant", etudiant: "participant" };
-      $("#who").textContent = `${prof.nom || session.user.email} · ${ROLE_LBL[S.role]}`;
+      const qui = `${prof.nom || session.user.email} · ${ROLE_LBL[S.role]}`;
+      $("#who").textContent = qui;
+      $("#app").hidden = false;
+      /* Session reprise sans saisie du mot de passe (connexion gardée par le navigateur) : on le dit clairement. */
+      if (restored) toast(`Déjà connecté(e) : ${qui}. Pour changer de compte, utilisez « Se déconnecter ».`);
       await loadAll();
       try { const c = localStorage.getItem("me_cohorte"); if (c && (c === "all" || D.cohortes.some((x) => x.id === c))) { S.cohorte = c; $("#cohorte").value = c; } S.view = localStorage.getItem("me_view_" + SPACE) || HOME[SPACE]; } catch (_) {}
       if (isEtudiant()) S.cohorte = "all";
       if (!views[S.view]) S.view = HOME[SPACE];
       render();
-    } catch (e) { $("#view").innerHTML = `<div class="empty">Impossible de charger les données : ${esc(e.message)}.<br>Vérifiez que supabase/schema.sql a été exécuté.</div>`; }
+    } catch (e) { $("#app").hidden = false; $("#view").innerHTML = `<div class="empty">Impossible de charger les données : ${esc(e.message)}.<br>Vérifiez que supabase/schema.sql a été exécuté.</div>`; }
   }
   if (!sb) { $("#login").hidden = false; $("#configWarn").hidden = false; $("#loginForm").hidden = true; return; }
   $("#loginForm").addEventListener("submit", async (e) => {
@@ -1147,6 +1152,14 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
       msg.className = "small"; msg.style.color = "var(--ok)"; msg.textContent = data.session ? "Compte créé, connexion en cours…" : "Compte créé. Un e-mail de confirmation vous a été envoyé : cliquez sur le lien, puis connectez-vous."; msg.hidden = false;
     });
   }
-  sb.auth.onAuthStateChange((_ev, session) => { if (session && /access_token=/.test(location.hash)) history.replaceState(null, "", location.pathname); start(session); });
-  sb.auth.getSession().then(({ data }) => start(data.session));
+  /* Un seul démarrage par utilisateur : INITIAL_SESSION (session gardée par le navigateur), SIGNED_IN, SIGNED_OUT.
+     Les rafraîchissements de jeton ne rechargent pas l'interface. */
+  let utilisateurCourant;
+  sb.auth.onAuthStateChange((ev, session) => {
+    if (session && /access_token=/.test(location.hash)) history.replaceState(null, "", location.pathname);
+    const uid = session?.user?.id || null;
+    if (uid === utilisateurCourant) return;
+    utilisateurCourant = uid;
+    start(session, ev === "INITIAL_SESSION");
+  });
 })();

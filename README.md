@@ -68,3 +68,4 @@ Le P&L est calculé à la volée : recettes facturées et encaissées par type, 
 - Lecture publique : `cohortes` et `seances` uniquement (nécessaire au pointage sans compte ; aucune page publique ne l'affiche pour l'instant). Les codes de séance, participants, présences et données financières ne sont lisibles que par les comptes équipe.
 - Les fonctions `checkin_participants` et `checkin` sont les seules écritures possibles sans compte ; elles exigent le code de séance et la fenêtre de date.
 - Activer l'authentification à deux facteurs sur les comptes GitHub et Supabase de l'organisation.
+- La connexion est gardée par le navigateur et vaut pour les trois espaces (un compte équipe ouvert sur `admin.html` est donc reconnu sur `prof.html` sans nouvelle saisie ; un bandeau « Déjà connecté(e) : … » le signale à l'ouverture). Sur un ordinateur partagé (PC de salle de cours), cliquer sur **Se déconnecter** en fin de séance.
