@@ -18,7 +18,7 @@
   const rand4 = () => String(Math.floor(Math.random() * 10000)).padStart(4, "0");
 
   const CFG = window.APP_CONFIG || {};
-  const configured = CFG.SUPABASE_URL && !/VOTRE-PROJET/.test(CFG.SUPABASE_URL) && CFG.SUPABASE_ANON_KEY && !/VOTRE_CLE/.test(CFG.SUPABASE_ANON_KEY);
+  const configured = CFG.SUPABASE_URL && !/VOTRE-PROJET/.test(CFG.SUPABASE_URL) && CFG.SUPABASE_ANON_KEY && !/VOTRE_CLE/.test(CFG.SUPABASE_ANON_KEY) && !/VOTRE-PROJET/.test(CFG.SUPABASE_URL);
   const sb = configured ? supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
 
   const STATUTS_P = ["Actif", "Abandon", "Diplômé", "Suspendu"];
