@@ -1,5 +1,5 @@
 -- Schéma de la base de gestion du Master Exécutif AIGP (Supabase / PostgreSQL)
--- À exécuter une seule fois dans l'éditeur SQL de Supabase, puis seed.sql.
+-- Appliqué automatiquement par l'intégration GitHub de Supabase (dossier migrations), ou à coller une fois dans l'éditeur SQL, suivi de 20261109000002_seed.sql.
 
 create extension if not exists pgcrypto;
 

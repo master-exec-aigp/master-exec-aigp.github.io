@@ -1,6 +1,6 @@
 """Construit les données d'amorçage (séances + émargements) à partir du planning Excel.
-Usage : python3 scripts/build_seed.py "<planning>.xlsx" > supabase/seed.sql
-Produit supabase/seed.sql (cohortes, séances, émargements, certificats) à exécuter dans Supabase.
+Usage : python3 scripts/build_seed.py "<planning>.xlsx" > supabase/migrations/20261109000002_seed.sql
+Produit supabase/migrations/20261109000002_seed.sql (cohortes, séances, émargements, certificats) à exécuter dans Supabase.
 """
 import sys, re, json, random, unicodedata
 import openpyxl

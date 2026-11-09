@@ -19,7 +19,7 @@ Site statique hébergé sur GitHub Pages (`https://master-exec-aigp.github.io`) 
 | **Intervenant** | e-mail + mot de passe, rôle `intervenant` | uniquement les journées dont le champ intervenant du planning contient son nom ; liste des participants réduite (nom, prénom, statut) | coche sa checklist, affiche le QR code en séance (ce qui coche l'étape « pendant »), régénère le code, pointe manuellement, télécharge ses slides |
 | **Équipe** | e-mail + mot de passe, rôle `admin` | tout | tout, y compris le suivi des checklists de tous les intervenants et la gestion des comptes |
 
-La séparation est appliquée par la base (politiques RLS de `supabase/schema.sql`), pas seulement par l'interface : un intervenant connecté sur `admin.html` est renvoyé vers `prof.html`, et une requête directe à l'API ne lui renvoie que ses données. Les participants n'ont aucun compte et ne peuvent lire que le planning.
+La séparation est appliquée par la base (politiques RLS du fichier de schéma dans `supabase/migrations/`), pas seulement par l'interface : un intervenant connecté sur `admin.html` est renvoyé vers `prof.html`, et une requête directe à l'API ne lui renvoie que ses données. Les participants n'ont aucun compte et ne peuvent lire que le planning.
 
 ### Checklist intervenant
 
@@ -27,7 +27,9 @@ Par journée de cours, trois phases dont les éléments sont modifiables dans *P
 
 ## Mise en service (une fois)
 
-1. **Supabase** : créer un projet gratuit sur supabase.com (région Europe). Dans *SQL Editor*, exécuter `supabase/schema.sql` puis `supabase/seed.sql` (plannings des cohortes 2, 3 et 4 issus du fichier Excel).
+1. **Supabase** : créer un projet sur supabase.com (région Europe). Deux façons d'appliquer la base :
+   - *manuelle* : dans *SQL Editor*, coller et exécuter `supabase/migrations/20261109000001_schema.sql` puis `supabase/migrations/20261109000002_seed.sql` (plannings des cohortes 2, 3 et 4 issus du fichier Excel) ;
+   - *automatique* : si le projet Supabase est relié à ce dépôt GitHub (*Integrations → GitHub*, offre Pro), les fichiers de `supabase/migrations/` sont appliqués à chaque push sur `main`.
 2. **Comptes** : laisser les inscriptions par e-mail activées (*Authentication → Providers → Email*) : un déclencheur en base n'accepte que les adresses déjà connues (fiche participant ou compte déclaré par l'équipe), tout autre e-mail est refusé. Créer le premier compte équipe dans *Authentication → Users → Add user* : le **premier compte qui se connecte** devient « équipe ». Il déclare ensuite les intervenants et les autres membres de l'équipe dans *Paramètres → Comptes & rôles* (pour un intervenant, indiquer le fragment de son nom tel qu'il apparaît dans le planning, par exemple « Gouvier ») et saisit l'e-mail de chaque participant sur sa fiche. Intervenants et participants créent alors eux-mêmes leur mot de passe depuis « Première connexion ? Créer mon compte » sur leur espace. Pour éviter l'étape de confirmation par e-mail, désactiver *Confirm email* dans le même écran.
 3. **Configuration** : copier dans `config.js` l'URL du projet et la clé `anon` (*Project Settings → API*). Cette clé est publique par conception ; la protection vient des politiques RLS du schéma.
 4. **Publication** : pousser ce dépôt dans l'organisation GitHub sous le nom `master-exec-aigp.github.io` (branche `main`). GitHub Pages est activé automatiquement pour un dépôt portant ce nom ; sinon *Settings → Pages → Deploy from branch → main / root*.
@@ -57,10 +59,10 @@ et le coller dans l'éditeur HTML d'une page Canvas. Une version « tableau stat
 ## Mettre à jour le planning depuis Excel
 
 ```bash
-python3 scripts/build_seed.py "chemin/vers/PLanning ME AIGP.xlsx" > supabase/seed.sql
+python3 scripts/build_seed.py "chemin/vers/PLanning ME AIGP.xlsx" > supabase/migrations/20261109000002_seed.sql
 ```
 
-puis ré-exécuter `supabase/seed.sql` dans Supabase : les séances et demi-journées sont mises à jour sans toucher aux présences ni aux codes existants. Les journées ajoutées directement dans l'espace équipe sont conservées.
+puis ré-exécuter ce fichier dans Supabase (ou pousser, si l'intégration GitHub est active) : les séances et demi-journées sont mises à jour sans toucher aux présences ni aux codes existants. Les journées ajoutées directement dans l'espace équipe sont conservées.
 
 ## Modèle de données
 
