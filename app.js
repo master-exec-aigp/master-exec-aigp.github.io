@@ -1141,11 +1141,12 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
     $("#showLogin")?.addEventListener("click", (e) => { e.preventDefault(); su.hidden = true; $("#loginForm").hidden = false; });
     su.addEventListener("submit", async (e) => {
       e.preventDefault(); const msg = $("#signupMsg"); msg.hidden = true;
-      const { data, error } = await sb.auth.signUp({ email: $("#suEmail").value.trim(), password: $("#suPassword").value });
+      /* Après confirmation par e-mail, Supabase renvoie sur l'espace d'où le compte a été créé (etudiant.html ou prof.html). */
+      const { data, error } = await sb.auth.signUp({ email: $("#suEmail").value.trim(), password: $("#suPassword").value, options: { emailRedirectTo: location.origin + location.pathname } });
       if (error) { msg.className = "err small"; msg.textContent = /non reconnue|Database error/i.test(error.message) ? "Adresse e-mail non reconnue : utilisez l'adresse communiquée à l'équipe du programme." : error.message; msg.hidden = false; return; }
       msg.className = "small"; msg.style.color = "var(--ok)"; msg.textContent = data.session ? "Compte créé, connexion en cours…" : "Compte créé. Un e-mail de confirmation vous a été envoyé : cliquez sur le lien, puis connectez-vous."; msg.hidden = false;
     });
   }
-  sb.auth.onAuthStateChange((_ev, session) => start(session));
+  sb.auth.onAuthStateChange((_ev, session) => { if (session && /access_token=/.test(location.hash)) history.replaceState(null, "", location.pathname); start(session); });
   sb.auth.getSession().then(({ data }) => start(data.session));
 })();
