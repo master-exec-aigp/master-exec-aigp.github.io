@@ -26,7 +26,7 @@ Par journée de cours, trois phases dont les éléments sont modifiables dans *P
 
 ## Mise en service (une fois)
 
-1. **Supabase** : créer un projet sur supabase.com (région Europe). Deux façons d'appliquer la base :
+1. **Supabase** : créer un projet sur supabase.com (région Europe). Deux façons d'appliquer la base (tous les fichiers de `supabase/migrations/`, dans l'ordre) :
    - *manuelle* : dans *SQL Editor*, coller et exécuter `supabase/migrations/20261109000001_schema.sql` puis `supabase/migrations/20261109000002_seed.sql` (plannings des cohortes 2, 3 et 4 issus du fichier Excel) ;
    - *automatique* : si le projet Supabase est relié à ce dépôt GitHub (*Integrations → GitHub*, offre Pro), les fichiers de `supabase/migrations/` sont appliqués à chaque push sur `main`.
 2. **Comptes** : laisser les inscriptions par e-mail activées (*Authentication → Providers → Email*) : un déclencheur en base n'accepte que les adresses déjà connues (fiche participant ou compte déclaré par l'équipe), tout autre e-mail est refusé. Créer le premier compte équipe dans *Authentication → Users → Add user* : le **premier compte qui se connecte** devient « équipe ». Il déclare ensuite les intervenants et les autres membres de l'équipe dans *Paramètres → Comptes & rôles* (pour un intervenant, indiquer le fragment de son nom tel qu'il apparaît dans le planning, par exemple « Gouvier ») et saisit l'e-mail de chaque participant sur sa fiche. Intervenants et participants créent alors eux-mêmes leur mot de passe depuis « Première connexion ? Créer mon compte » sur leur espace. Pour éviter l'étape de confirmation par e-mail, désactiver *Confirm email* dans le même écran.
@@ -38,7 +38,7 @@ Par journée de cours, trois phases dont les éléments sont modifiables dans *P
 - Chaque demi-journée (`C4-J01-AM`, `C4-J01-PM`…) a un **code à 4 chiffres** et un lien `checkin.html?e=<id>`.
 - Dans l'espace équipe, *Kit QR intervenants* génère une slide 16:9 par demi-journée (QR + code) et le texte du mail à envoyer à l'intervenant ; téléchargement PNG ou impression PDF.
 - Le participant scanne, saisit le code, choisit son nom : la présence est écrite via une fonction SQL sécurisée. Sans le bon code, la liste des noms n'est pas renvoyée.
-- Le pointage n'est accepté que le jour de la séance (± 1 jour), sauf si la demi-journée est marquée « ouverte » dans l'espace équipe.
+- **Seul l'intervenant ouvre l'émargement** : afficher le QR code depuis son espace ouvre la demi-journée, quitter la projection la ferme (fermeture automatique après 4 h). Hors de cette fenêtre, aucun pointage par QR code ou par code n'est accepté. L'équipe peut aussi ouvrir ou fermer manuellement depuis *Pointage*.
 - Complément manuel : vue *Pointage* (présent / absent / excusé), import CSV d'un export Canvas Roll Call ou d'un formulaire.
 
 ## Dossier administratif des participants

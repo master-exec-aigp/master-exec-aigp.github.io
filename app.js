@@ -326,7 +326,7 @@
         if (em) {
           const n = D.presences.filter((p) => p.emargement === em.id && p.statut === "Présent").length;
           html += `<div class="demi"><span class="mono">${esc(em.id)}</span><span>${demi === "AM" ? "Matin" : "Après-midi"} · code <span class="code">${esc(em.code)}</span></span><span>${esc(em.intervenant || '<span class="muted">intervenant à préciser</span>')}</span><span class="pill ${n ? "ok" : ""}">${n} présent(s)</span>
-            ${em.ouvert ? '<span class="pill warn">pointage forcé ouvert</span>' : ""}<span style="flex:1"></span><button class="btn sm" data-act="go" data-view="pointage" data-em="${esc(em.id)}">Pointer</button><button class="btn sm" data-act="editEm" data-id="${esc(em.id)}">Code / intervenant</button></div>`;
+            ${em.ouvert ? '<span class="pill ok">émargement ouvert</span>' : ""}<span style="flex:1"></span><button class="btn sm" data-act="go" data-view="pointage" data-em="${esc(em.id)}">Pointer</button><button class="btn sm" data-act="editEm" data-id="${esc(em.id)}">Code / intervenant</button></div>`;
         }
       });
       html += `</div>`;
@@ -352,7 +352,7 @@
     const cours = seancesOf(em.id).map((s) => s.cours).filter(Boolean);
     html += `<div class="card"><div class="toolbar" style="margin:0 0 10px"><div><strong style="color:var(--rouge)">${esc(em.id)}</strong> · ${esc(fmtDate(em.date, true))} · ${esc(certLbl(em.certificat))}<br><span class="small muted">${esc(cours.join(" / ") || "")} · ${esc(em.intervenant || "")} · ${heuresEm(em.id, false)} h</span></div><span class="grow"></span>
       <span class="pill ok">${nP} présents</span><span class="pill warn">${nE} excusés</span><span class="pill bad">${parts.length - nP - nE} absents / non pointés</span></div>
-      <div class="toolbar"><span class="small">Code séance <span class="code">${esc(em.code)}</span></span><button class="btn sm" data-act="copyLink" data-em="${esc(em.id)}">Copier le lien de pointage</button><button class="btn sm" data-act="toggleOpen" data-id="${esc(em.id)}">${em.ouvert ? "Fermer le pointage forcé" : "Ouvrir le pointage hors date"}</button><span class="grow"></span>
+      <div class="toolbar"><span class="small">Code séance <span class="code">${esc(em.code)}</span></span><button class="btn sm" data-act="copyLink" data-em="${esc(em.id)}">Copier le lien de pointage</button><span class="pill ${em.ouvert ? "ok" : ""}">${em.ouvert ? "émargement ouvert" : "émargement fermé"}</span><button class="btn sm" data-act="toggleOpen" data-id="${esc(em.id)}">${em.ouvert ? "Fermer l'émargement" : "Ouvrir sans projeter"}</button><span class="grow"></span>
       <button class="btn sm" data-act="markAll" data-st="Présent">Tous présents</button><button class="btn sm" data-act="markAll" data-st="Absent">Non pointés → absents</button></div>
       <div class="att-grid">` + parts.map((p) => {
         const st = pres[p.id]?.statut, src = pres[p.id]?.source;
@@ -493,7 +493,7 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
     const n = D.presences.filter((p) => p.emargement === em.id && p.statut === "Présent").length;
     const cours = uniq(seancesOf(em.id).map((s) => s.cours).filter(Boolean));
     setTimeout(() => { const cv = $("#projQr"); if (!cv) return; const ctx = cv.getContext("2d"); const qr = qrcode(0, "M"); qr.addData(checkinUrl(em.id)); qr.make(); const m = qr.getModuleCount(), size = cv.width, cell = size / m; ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, size, size); ctx.fillStyle = "#000"; for (let r = 0; r < m; r++) for (let c = 0; c < m; c++) if (qr.isDark(r, c)) ctx.fillRect(c * cell, r * cell, Math.ceil(cell), Math.ceil(cell)); }, 0);
-    return `<div class="toolbar no-print"><button class="btn" data-act="go" data-view="${esc(S.ui.projBack || "prof")}">← Retour</button><span class="grow"></span><span class="pill ok" id="projCount">${n} présent(s)</span><button class="btn" data-act="refreshProj">↻ Actualiser</button><button class="btn" data-act="newCode" data-id="${esc(em.id)}">Nouveau code</button><button class="btn primary" data-act="fullscreen">Plein écran</button></div>
+    return `<div class="toolbar no-print"><button class="btn" data-act="fermerProj" data-id="${esc(em.id)}">← Fermer l'émargement</button><span class="pill ${em.ouvert ? "ok" : "bad"}">${em.ouvert ? "émargement ouvert" : "fermé"}</span><span class="grow"></span><span class="pill ok" id="projCount">${n} présent(s)</span><button class="btn" data-act="refreshProj">↻ Actualiser</button><button class="btn" data-act="newCode" data-id="${esc(em.id)}">Nouveau code</button><button class="btn primary" data-act="fullscreen">Plein écran</button></div>
       <div class="card" id="projCard" style="text-align:center;padding:32px 16px">
         <img src="assets/logo.png" alt="UM6P | AIM | UNESCO" style="width:min(100%,520px)">
         <h1 style="font-size:clamp(1.6rem,4vw,2.6rem);margin-top:16px">Émargement · ${em.demi === "AM" ? "matin" : "après-midi"}</h1>
@@ -512,7 +512,7 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
   const moi = () => D.participants.find((p) => norm(p.email) === norm(S.me?.email)) || D.participants[0];
   const etuJours = () => { const p = moi(); if (!p) return []; return journees().filter((j) => j.cohorte === p.cohorte); };
   const presenceDe = (emId) => { const p = moi(); return D.presences.find((x) => x.emargement === emId && x.participant === p?.id); };
-  const fenetre = (e) => e.ouvert || (e.date && Math.abs((new Date(e.date + "T00:00:00") - new Date(today() + "T00:00:00")) / 864e5) <= 1);
+  const fenetre = (e) => !!e.ouvert; // ouvert par l'intervenant pendant la projection du QR code
   views.etu_accueil = () => {
     const p = moi();
     if (!p) return `<div class="empty"><strong>Aucune fiche participant n'est associée à ${esc(S.me?.email || "")}.</strong><br>Contactez l'équipe du programme pour qu'elle enregistre votre adresse e-mail.</div>`;
@@ -525,7 +525,7 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
       aPointer.map((e) => { const pr = presenceDe(e.id); return `<div class="att" style="flex-direction:column;align-items:stretch"><div><strong>${e.demi === "AM" ? "Matin" : "Après-midi"}</strong> · ${esc(fmtDate(e.date))}<br><span class="small muted">${esc(uniq(seancesOf(e.id).map((s) => s.cours).filter(Boolean)).join(" / ") || certLbl(e.certificat))}</span></div>` +
         (pr?.statut === "Présent" ? `<span class="pill ok" style="align-self:flex-start">✓ Présence enregistrée${pr.horodatage ? " à " + new Date(pr.horodatage).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : ""}</span>`
           : `<form data-etu-em="${esc(e.id)}" style="display:flex;gap:8px"><input class="mono" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="Code" required style="width:110px;padding:8px;border:1px solid var(--bord);border-radius:6px;background:var(--surface);letter-spacing:.3em;text-align:center"><button class="btn primary" type="submit">Pointer</button></form>`) + `</div>`; }).join("") + `</div>`
-      : `<p class="muted">Aucune séance aujourd'hui. Le pointage s'ouvre le jour de la séance.</p>`) + `</div>`;
+      : `<p class="muted">Aucun émargement ouvert pour le moment. Il s'ouvre quand l'intervenant affiche le QR code en séance ; actualisez alors cette page.</p><button class="btn sm" data-act="etuRefresh">↻ Actualiser</button>`) + `</div>`;
     html += `<div class="tiles"><div class="tile"><div class="lbl">Présence globale</div><div class="val" style="color:${t.total.tenues && t.total.pres / t.total.tenues < seuil ? "var(--critique)" : "inherit"}">${pct(t.total.tenues ? t.total.pres / t.total.tenues : null)}</div><div class="sub">${t.total.pres} h sur ${t.total.tenues} h tenues · seuil ${D.cfg.seuil_presence} %</div></div>` +
       Object.entries(D.cfg.certificats).filter(([c]) => t.parCert[c]?.tenues).map(([c, l]) => { const x = t.parCert[c]; return `<div class="tile"><div class="lbl">${c} · ${esc(l)}</div><div class="val" style="font-size:1.2rem">${pct(x.pres / x.tenues)}</div><div class="sub">${x.pres} h / ${x.tenues} h</div></div>`; }).join("") + `</div>`;
     html += `<div class="card"><h2>Prochaines journées</h2>` + (prochains.length ? table([
@@ -568,7 +568,7 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
     e.preventDefault(); const btn = f.querySelector("button"); btn.disabled = true;
     const { data, error } = await sb.rpc("checkin_me", { p_emargement: f.dataset.etuEm, p_code: f.querySelector("input").value.trim() });
     btn.disabled = false;
-    if (error) return toast(/P0001|incorrect/i.test(error.code + error.message) ? "Code incorrect." : /P0002/.test(error.code + error.message) ? "Le pointage de cette séance n'est pas ouvert." : error.message, true);
+    if (error) return toast(/P0001|incorrect/i.test(error.code + error.message) ? "Code incorrect." : /P0002/.test(error.code + error.message) ? "L'émargement n'est pas ouvert : attendez que l'intervenant affiche le QR code." : error.message, true);
     toast(`Présence enregistrée : ${data}`); D.presences = await fetchAll("presences"); render();
   });
 
@@ -758,7 +758,11 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
   A.openDay = (d) => { S.ui.openDay = S.ui.openDay === d.key && !d.view ? "" : d.key; if (d.view) { const [c] = d.key.split("|"); if (S.cohorte !== "all" && S.cohorte !== c) { S.cohorte = c; $("#cohorte").value = c; } S.ui.profAll = true; setView(d.view); } else render(); };
   A.goKit = (d) => { S.ui.kitDay = d.key; S.ui.interv = ""; setView("kit"); };
   A.projeter = async (d) => {
-    S.ui.proj = d.id; S.ui.projBack = S.view === "projeter" ? S.ui.projBack : S.view; setView("projeter");
+    S.ui.proj = d.id; S.ui.projBack = S.view === "projeter" ? S.ui.projBack : S.view;
+    /* Afficher le QR code ouvre l'émargement ; seul ce geste de l'intervenant (ou de l'équipe) le permet. */
+    const { error: eo } = await sb.from("emargements").update({ ouvert: true, ouvert_le: new Date().toISOString() }).eq("id", d.id);
+    if (eo) toast("Impossible d'ouvrir l'émargement : " + eo.message, true); else D.emargements = await fetchAll("emargements");
+    setView("projeter");
     /* Coche automatiquement l'étape « pendant » correspondant à la demi-journée (1re ligne = matin, 2e = après-midi). */
     const em = D.emargements.find((e) => e.id === d.id); const items = D.cfg.checklist.filter((i) => i.phase === "pendant");
     const item = items.find((i) => norm(i.libelle).includes(em.demi === "AM" ? "matin" : "apres")) || items[em.demi === "AM" ? 0 : 1];
@@ -768,8 +772,14 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
       if (!error) D.checklist = await fetchAll("checklist");
     }
   };
+  A.etuRefresh = async () => { D.emargements = await fetchAll("emargements_min"); D.presences = await fetchAll("presences"); render(); };
   A.refreshProj = async () => { D.presences = await fetchAll("presences"); render(); toast("Présences actualisées"); };
-  A.newCode = async (d) => { if (!(await confirmDlg("Générer un nouveau code pour cette demi-journée ? Les participants déjà pointés le restent ; le code imprimé sur une slide préparée à l'avance ne sera plus valable.", "Nouveau code"))) return; await write("emargements", "update", { code: rand4() }, d.id); };
+  A.fermerProj = async (d) => {
+    const { error } = await sb.from("emargements").update({ ouvert: false }).eq("id", d.id);
+    if (error) return toast(error.message, true);
+    D.emargements = await fetchAll("emargements"); toast("Émargement fermé"); setView(S.ui.projBack || "prof");
+  };
+  A.newCode = async (d) => { if (!(await confirmDlg("Générer un nouveau code pour cette demi-journée ? Les participants déjà pointés le restent ; le code imprimé sur une slide préparée à l'avance ne sera plus valable.", "Nouveau code"))) return; await write("emargements", "update", { code: rand4() }, d.id); S.view = "projeter"; render(); };
   A.fullscreen = () => { const el = $("#projCard"); if (document.fullscreenElement) document.exitFullscreen(); else if (el?.requestFullscreen) el.requestFullscreen().catch(() => toast("Plein écran indisponible dans ce navigateur", true)); };
   A.kitClear = () => { S.ui.kitDay = ""; render(); };
   A.tick = async (d, el) => {
@@ -921,7 +931,7 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
     const e = D.emargements.find((x) => x.id === d.id);
     const v = await openForm({ title: `Demi-journée ${e.id}`, fields: [
       { k: "code", label: "Code de séance (4 chiffres)", value: e.code, attrs: 'pattern="[0-9]{4}" maxlength="4"', help: "Changer le code invalide la slide déjà envoyée à l'intervenant." },
-      { k: "intervenant", label: "Intervenant", value: e.intervenant }, { k: "ouvert", label: "Pointage ouvert quelle que soit la date", type: "checkbox", value: e.ouvert },
+      { k: "intervenant", label: "Intervenant", value: e.intervenant }, { k: "ouvert", label: "Émargement ouvert (se ferme automatiquement après 4 h)", type: "checkbox", value: e.ouvert },
     ] });
     if (v) await write("emargements", "update", v, e.id);
   };
@@ -968,7 +978,7 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
     const { error } = await sb.from("cohortes").update({ libelle: v.libelle.trim(), debut: v.debut || null, fin: v.fin || null }).eq("id", c.id); if (error) return toast(error.message, true);
     await loadAll(); render(); toast("Cohorte mise à jour");
   };
-  A.toggleOpen = async (d) => { const e = D.emargements.find((x) => x.id === d.id); await write("emargements", "update", { ouvert: !e.ouvert }, e.id); };
+  A.toggleOpen = async (d) => { const e = D.emargements.find((x) => x.id === d.id); await write("emargements", "update", e.ouvert ? { ouvert: false } : { ouvert: true, ouvert_le: new Date().toISOString() }, e.id); };
   A.mark = async (d) => { await write("presences", "upsert", { emargement: S.ui.em, participant: d.p, statut: d.st, source: "manuel", horodatage: new Date().toISOString() }, "emargement,participant"); };
   A.markAll = async (d) => {
     const em = D.emargements.find((e) => e.id === S.ui.em); const parts = D.participants.filter((p) => p.cohorte === em.cohorte && p.statut === "Actif");

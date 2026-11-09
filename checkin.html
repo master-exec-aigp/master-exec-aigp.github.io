@@ -62,7 +62,7 @@
   const msg = (e) => {
     if (!e) return "";
     if (/P0001|incorrect/i.test(e.code + e.message)) return "Code incorrect. Vérifiez le code affiché à l'écran.";
-    if (/P0002|ouvert/i.test(e.code + e.message)) return "Le pointage de cette séance n'est pas ouvert aujourd'hui.";
+    if (/P0002|ouvert/i.test(e.code + e.message)) return "L'émargement n'est pas ouvert : attendez que l'intervenant affiche le QR code.";
     if (/P0003/i.test(e.code + e.message)) return "Participant inconnu pour cette cohorte.";
     return "Erreur de connexion. Réessayez dans quelques secondes.";
   };
