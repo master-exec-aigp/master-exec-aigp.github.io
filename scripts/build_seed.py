@@ -74,8 +74,10 @@ out.append(",\n".join(f"({q(c)}, {q(l)}, {q(d)}, {q(f)})" for c,l,d,f in [
     ("C4","Cohorte 4 (2026-2028)","2026-11-01","2028-06-30")]) +
     "\non conflict (id) do update set libelle = excluded.libelle;")
 out.append("")
+# Le code de séance est tiré au hasard par la base à l'insertion (jamais écrit dans ce fichier, qui est public) ;
+# il n'est pas modifié lors d'une mise à jour du planning.
 out.append("insert into emargements (id, cohorte, certificat, jour, date, demi, code, intervenant) values")
-out.append(",\n".join(f"({q(e['id'])}, {q(e['cohorte'])}, {q(e['certificat'])}, {e['jour']}, {q(e['date'])}, {q(e['demi'])}, {q(e['code'])}, {q(e['intervenant'])})" for e in emargements) +
+out.append(",\n".join(f"({q(e['id'])}, {q(e['cohorte'])}, {q(e['certificat'])}, {e['jour']}, {q(e['date'])}, {q(e['demi'])}, lpad(floor(random()*10000)::text, 4, '0'), {q(e['intervenant'])})" for e in emargements) +
     "\non conflict (id) do update set certificat = excluded.certificat, date = excluded.date, intervenant = excluded.intervenant;")
 out.append("")
 out.append("insert into seances (id, cohorte, certificat, jour, date, creneau, duree, cours, intervenant, emargement) values")
