@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Espace équipe — Master Exécutif AIGP</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231B75BC'/%3E%3Ctext x='16' y='22' font-size='16' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3EME%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Connexion -->
+<section id="login" class="public" hidden>
+  <img class="logo" src="assets/logo.png" alt="UM6P | AIM | UNESCO">
+  <div class="card">
+    <h1>Gestion du Master Exécutif AIGP</h1>
+    <p class="muted">Espace réservé à l'équipe du programme. Connectez-vous avec le compte créé par l'administrateur.</p>
+    <form id="loginForm" class="stack">
+      <div class="field"><label for="email">E-mail</label><input id="email" type="email" autocomplete="username" required></div>
+      <div class="field"><label for="password">Mot de passe</label><input id="password" type="password" autocomplete="current-password" required></div>
+      <div class="form-actions"><button class="btn primary" type="submit">Se connecter</button></div>
+      <p id="loginErr" class="err small" hidden></p>
+    </form>
+    <p id="configWarn" class="small err" hidden>Le fichier <code>config.js</code> ne contient pas encore l'URL et la clé du projet Supabase.</p>
+  </div>
+</section>
+
+<!-- Application -->
+<div id="app" class="shell" hidden>
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="assets/logo.png" alt="UM6P | AIM | UNESCO">
+      <strong>Master Exécutif AIGP</strong>
+      <span class="small muted">Gestion administrative</span>
+    </div>
+    <nav class="nav" id="nav">
+      <button data-view="dash"><span class="ico">◧</span>Tableau de bord</button>
+      <button data-view="participants"><span class="ico">☺</span>Participants</button>
+      <button data-view="seances"><span class="ico">▦</span>Séances</button>
+      <button data-view="pointage"><span class="ico">✓</span>Pointage</button>
+      <button data-view="taux"><span class="ico">%</span>Taux de présence</button>
+      <button data-view="kit"><span class="ico">▣</span>Kit QR intervenants</button>
+      <button data-view="depenses"><span class="ico">−</span>Dépenses</button>
+      <button data-view="recettes"><span class="ico">+</span>Recettes</button>
+      <button data-view="pnl"><span class="ico">Σ</span>P&amp;L</button>
+      <button data-view="params"><span class="ico">⚙</span>Paramètres &amp; Canvas</button>
+    </nav>
+    <div class="foot"><span id="who"></span><br><button class="btn sm" id="logout" type="button">Se déconnecter</button></div>
+  </aside>
+  <main>
+    <div class="topbar">
+      <div class="scope">
+        <label for="cohorte" class="muted small">Cohorte</label>
+        <select id="cohorte"><option value="all">Toutes les cohortes</option></select>
+        <button class="btn sm" data-act="addCohorte" type="button" title="Créer une cohorte, éventuellement en répliquant le planning d'une cohorte existante">+ Cohorte</button>
+      </div>
+      <div class="scope"><button class="btn sm" id="reload" type="button">↻ Actualiser</button></div>
+    </div>
+    <div id="view"><div class="empty">Chargement des données…</div></div>
+  </main>
+</div>
+
+<dialog id="modal"></dialog>
+<div id="toast" class="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

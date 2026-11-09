@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Master Exécutif AIGP — UM6P</title>
+<meta name="description" content="Executive Master in AI Governance & Practice — UM6P | AIM | UNESCO. Planning des cohortes, émargement et espace équipe.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .home { max-width: 980px; margin: 0 auto; padding-block: 28px 60px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .home header { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+  .home header img { width: min(100%, 460px); }
+  .hero { padding: 28px 0 10px; border-bottom: 3px solid var(--bleu); margin-bottom: 24px; }
+  .hero h1 { font-size: clamp(1.6rem, 3.5vw, 2.4rem); }
+  .hero p { max-width: 65ch; font-size: 1.05rem; }
+  .facts { display: flex; flex-wrap: wrap; gap: 24px; margin: 14px 0 0; padding: 0; list-style: none; }
+  .facts li strong { display: block; font-size: 1.5rem; color: var(--rouge); font-variant-numeric: tabular-nums; }
+  .facts li span { font-size: .85rem; color: var(--texte-2); text-transform: uppercase; letter-spacing: .05em; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .certs { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; counter-reset: c; }
+  .certs div { display: grid; grid-template-columns: 44px 1fr; gap: 10px; align-items: center; padding: 10px 12px; background: var(--peche); border-radius: 6px; }
+  .certs div b { font-family: var(--mono); color: var(--bleu); font-size: 1.1rem; }
+  .cohorts a.btn { justify-content: space-between; width: 100%; margin-top: 8px; }
+  footer { margin-top: 40px; font-size: .85rem; color: var(--texte-2); border-top: 1px solid var(--bord); padding-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
+</style>
+</head>
+<body>
+<div class="home">
+  <header>
+    <img src="assets/logo.png" alt="UM6P | AIM | UNESCO">
+    <a class="btn" href="admin.html">Espace équipe →</a>
+  </header>
+
+  <section class="hero">
+    <h1>Executive Master in AI Governance &amp; Practice</h1>
+    <p>Programme exécutif de l'Université Mohammed VI Polytechnique (UM6P), porté par AIM, le centre international d'intelligence artificielle du Maroc placé sous l'égide de l'UNESCO. Il forme des décideurs capables de gouverner, déployer et transformer leurs organisations par l'IA.</p>
+    <ul class="facts">
+      <li><strong>18</strong><span>mois</span></li>
+      <li><strong>540</strong><span>heures</span></li>
+      <li><strong>6</strong><span>certificats capitalisables</span></li>
+      <li><strong>4</strong><span>cohortes depuis 2023</span></li>
+    </ul>
+  </section>
+
+  <section class="card" style="margin-bottom:16px">
+    <h2>Six certificats, un parcours</h2>
+    <div class="certs">
+      <div><b>C1</b><span>AI Foundations</span></div>
+      <div><b>C2</b><span>AI Applications</span></div>
+      <div><b>C3</b><span>AI Analytics &amp; Data Science</span></div>
+      <div><b>C4</b><span>Robotics &amp; Autonomous Systems</span></div>
+      <div><b>C5</b><span>AI Governance</span></div>
+      <div><b>C6</b><span>AI Transformation</span></div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="card cohorts">
+      <h2>Planning des cohortes</h2>
+      <p class="muted small">Calendrier des séances par certificat, avec les liens d'émargement de chaque demi-journée.</p>
+      <a class="btn" href="planning.html?cohorte=C4">Cohorte 4 · 2026-2028 <span>→</span></a>
+      <a class="btn" href="planning.html?cohorte=C3">Cohorte 3 · 2025-2027 <span>→</span></a>
+      <a class="btn" href="planning.html?cohorte=C2">Cohorte 2 · 2024-2026 <span>→</span></a>
+    </section>
+    <section class="card">
+      <h2>Émargement en séance</h2>
+      <ol style="padding-left:18px;margin:0">
+        <li>Scannez le QR code affiché par l'intervenant.</li>
+        <li>Saisissez le code de séance à 4 chiffres.</li>
+        <li>Sélectionnez votre nom : votre présence est enregistrée.</li>
+      </ol>
+      <p class="small muted" style="margin-top:10px">Sans QR code, utilisez le lien « Émarger » de la demi-journée dans le planning de votre cohorte. Le code vous est communiqué en séance.</p>
+    </section>
+  </div>
+
+  <footer>
+    <span>UM6P · AIM — International Artificial Intelligence Center of Morocco · sous l'égide de l'UNESCO</span>
+    <a href="admin.html">Espace équipe</a>
+  </footer>
+</div>
+</body>
+</html>

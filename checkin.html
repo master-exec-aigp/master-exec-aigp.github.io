@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Émargement — Master Exécutif AIGP</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="public">
+  <img class="logo" src="assets/logo.png" alt="UM6P | AIM | UNESCO">
+  <div class="card">
+    <h1>Émargement</h1>
+    <p class="muted" id="seanceLbl">Séance <span class="mono" id="emId"></span></p>
+
+    <div class="step on" id="s1">
+      <p>Saisissez le <strong>code à 4 chiffres</strong> affiché sur l'écran de l'intervenant.</p>
+      <form id="codeForm">
+        <input class="bigcode" id="code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="one-time-code" placeholder="····" required>
+        <div class="form-actions"><button class="btn primary" type="submit" id="codeBtn">Continuer</button></div>
+      </form>
+      <p class="err" id="err1" hidden></p>
+    </div>
+
+    <div class="step" id="s2">
+      <p>Sélectionnez votre nom.</p>
+      <input type="search" id="filtre" placeholder="Rechercher…" style="width:100%;padding:9px 10px;border:1px solid var(--bord);border-radius:8px;background:var(--surface)">
+      <div class="names" id="names"></div>
+      <p class="err" id="err2" hidden></p>
+      <p class="small muted" style="margin-top:12px">Votre nom n'apparaît pas ? Signalez-le à l'intervenant ou à l'équipe du programme : votre présence sera enregistrée manuellement.</p>
+    </div>
+
+    <div class="step" id="s3">
+      <div class="ok-box">
+        <div class="check">✓</div>
+        <h2 id="okName"></h2>
+        <p>Votre présence est enregistrée.<br><span class="muted small" id="okTime"></span></p>
+      </div>
+    </div>
+
+    <div class="step" id="s0">
+      <p class="err">Lien d'émargement incomplet : scannez à nouveau le QR code affiché en séance.</p>
+    </div>
+  </div>
+  <p class="small muted" style="text-align:center;margin-top:14px">Executive Master in AI Governance &amp; Practice · UM6P | AIM | UNESCO</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const params = new URLSearchParams(location.search);
+  const em = (params.get("e") || "").trim();
+  const show = (id) => { document.querySelectorAll(".step").forEach((s) => s.classList.toggle("on", s.id === id)); };
+  if (!em) { show("s0"); $("#seanceLbl").hidden = true; return; }
+  $("#emId").textContent = em;
+
+  const sb = supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_ANON_KEY);
+  let code = "", liste = [];
+  const msg = (e) => {
+    if (!e) return "";
+    if (/P0001|incorrect/i.test(e.code + e.message)) return "Code incorrect. Vérifiez le code affiché à l'écran.";
+    if (/P0002|ouvert/i.test(e.code + e.message)) return "Le pointage de cette séance n'est pas ouvert aujourd'hui.";
+    if (/P0003/i.test(e.code + e.message)) return "Participant inconnu pour cette cohorte.";
+    return "Erreur de connexion. Réessayez dans quelques secondes.";
+  };
+
+  $("#codeForm").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    code = $("#code").value.trim();
+    $("#codeBtn").disabled = true; $("#err1").hidden = true;
+    const { data, error } = await sb.rpc("checkin_participants", { p_emargement: em, p_code: code });
+    $("#codeBtn").disabled = false;
+    if (error) { $("#err1").textContent = msg(error); $("#err1").hidden = false; return; }
+    liste = data || [];
+    render("");
+    show("s2");
+    let memo = null; try { memo = localStorage.getItem("me_participant"); } catch (_) {}
+    if (memo) { const b = document.querySelector(`[data-id="${memo}"]`); if (b) { b.scrollIntoView({ block: "center" }); b.style.borderColor = "var(--bleu)"; } }
+  });
+
+  function render(q) {
+    const norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    const box = $("#names"); box.innerHTML = "";
+    liste.filter((p) => !q || norm(p.prenom + " " + p.nom).includes(norm(q))).forEach((p) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.dataset.id = p.id; b.className = p.deja ? "deja" : "";
+      b.textContent = `${p.nom.toUpperCase()} ${p.prenom}` + (p.deja ? " — déjà pointé(e)" : "");
+      b.addEventListener("click", () => valider(p));
+      box.appendChild(b);
+    });
+    if (!box.children.length) box.innerHTML = '<p class="muted">Aucun nom ne correspond.</p>';
+  }
+  $("#filtre").addEventListener("input", (e) => render(e.target.value));
+
+  async function valider(p) {
+    $("#err2").hidden = true;
+    const { data, error } = await sb.rpc("checkin", { p_emargement: em, p_code: code, p_participant: p.id });
+    if (error) { $("#err2").textContent = msg(error); $("#err2").hidden = false; return; }
+    try { localStorage.setItem("me_participant", p.id); } catch (_) {}
+    $("#okName").textContent = data;
+    $("#okTime").textContent = new Date().toLocaleString("fr-FR");
+    show("s3");
+  }
+})();
+</script>
+</body>
+</html>

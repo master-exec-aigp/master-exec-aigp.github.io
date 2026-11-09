@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Planning — Master Exécutif AIGP</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+<style>
+  body { background: var(--surface); }
+  .cert { margin: 18px 0 8px; color: var(--bleu); border-bottom: 2px solid var(--bleu); padding-bottom: 4px; }
+  .day { margin-bottom: 10px; }
+  .day h4 { margin: 0 0 4px; color: var(--rouge); }
+  .day table td:first-child { width: 48px; color: var(--texte-2); }
+  .pointage a { white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="public wide">
+  <div id="head"><h1 id="titre">Planning</h1><p class="muted" id="sous"></p></div>
+  <div id="out" class="muted">Chargement…</div>
+  <p class="small muted" style="margin-top:20px">Les liens « Émarger » ouvrent la page de pointage de la demi-journée ; le code à 4 chiffres est communiqué en séance par l'intervenant.</p>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+(async function () {
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const p = new URLSearchParams(location.search);
+  const coh = p.get("cohorte") || "C4";
+  const compact = p.get("compact") === "1";
+  if (compact) $("#head").hidden = true;
+  const CERTS = { C1: "AI Foundations", C2: "AI Applications", C3: "AI Analytics & Data Science", C4: "Robotics & Autonomous Systems", C5: "AI Governance", C6: "AI Transformation" };
+  const fmt = (d) => d ? new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date(d + "T00:00:00")) : "date à confirmer";
+  const sb = supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_ANON_KEY);
+  const [{ data: cohs }, { data: seances, error }] = await Promise.all([
+    sb.from("cohortes").select("*").eq("id", coh),
+    sb.from("seances").select("*").eq("cohorte", coh).order("jour").order("creneau"),
+  ]);
+  if (error || !seances) { $("#out").textContent = "Planning indisponible pour le moment."; return; }
+  $("#titre").textContent = "Planning — " + (cohs && cohs[0] ? cohs[0].libelle : coh);
+  $("#sous").textContent = "Executive Master in AI Governance & Practice";
+  const base = (APP_CONFIG.SITE_URL || "") + "/checkin.html?e=";
+  let html = "", lastCert = null, lastJour = null;
+  const parJour = {};
+  seances.forEach((s) => { (parJour[s.jour] ||= []).push(s); });
+  Object.keys(parJour).map(Number).sort((a, b) => a - b).forEach((j) => {
+    const rows = parJour[j]; const s0 = rows[0];
+    if (s0.certificat !== lastCert) { lastCert = s0.certificat; html += `<h3 class="cert">${esc(lastCert)} · ${esc(CERTS[lastCert] || "")}</h3>`; }
+    const ems = [...new Set(rows.map((r) => r.emargement).filter(Boolean))];
+    html += `<div class="day"><h4>Jour ${j} — ${esc(fmt(s0.date))}</h4><div class="tablewrap"><table class="plain"><tbody>`;
+    rows.forEach((r) => {
+      const em = r.emargement, first = ems.indexOf(em) >= 0 && rows.find((x) => x.emargement === em) === r;
+      html += `<tr><td>${esc(r.creneau)}</td><td>${esc(r.cours || "—")}<br><span class="small muted">${esc(r.intervenant || "")}</span></td>`
+        + `<td class="pointage">${first ? `<a href="${base + encodeURIComponent(em)}" target="_blank" rel="noopener">Émarger (${em.endsWith("AM") ? "matin" : "après-midi"})</a>` : ""}</td></tr>`;
+    });
+    html += `</tbody></table></div></div>`;
+  });
+  $("#out").innerHTML = html || '<p class="muted">Aucune séance planifiée.</p>';
+})();
+</script>
+</body>
+</html>
