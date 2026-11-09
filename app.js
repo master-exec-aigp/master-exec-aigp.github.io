@@ -1087,7 +1087,8 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
       const allowed = S.role === "admin" || (S.role === "intervenant" && SPACE === "prof") || (S.role === "etudiant" && SPACE === "etudiant");
       if (!allowed) { location.replace(PAGE[S.role]); return; }
       if (isEtudiant()) $(".topbar .scope").hidden = true;
-      $("#who").textContent = `${prof.nom || session.user.email} · ${{ admin: "équipe", intervenant: "intervenant", etudiant: "participant" }[S.role]}`;
+      const ROLE_LBL = { admin: "équipe", intervenant: "intervenant", etudiant: "participant" };
+      $("#who").textContent = `${prof.nom || session.user.email} · ${ROLE_LBL[S.role]}`;
       await loadAll();
       try { const c = localStorage.getItem("me_cohorte"); if (c && (c === "all" || D.cohortes.some((x) => x.id === c))) { S.cohorte = c; $("#cohorte").value = c; } S.view = localStorage.getItem("me_view_" + SPACE) || HOME[SPACE]; } catch (_) {}
       if (isEtudiant()) S.cohorte = "all";
