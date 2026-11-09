@@ -7,7 +7,7 @@ Site statique hébergé sur GitHub Pages (`https://master-exec-aigp.github.io`) 
 | `index.html` | public | Accueil du programme et accès aux trois espaces |
 | `checkin.html?e=C4-J01-AM` | public, protégé par le code de séance | Page de pointage ouverte par le QR code |
 | `etudiant.html` | participants (connexion) | Pointage par code de séance (identité connue), présences par certificat, planning et supports de cours de sa cohorte |
-| `prof.html` | intervenants (connexion) | Leurs journées : checklist avant / pendant / après, affichage du QR code en séance, pointage, slides à insérer |
+| `prof.html` | intervenants (connexion) | Leurs journées : checklist avant / pendant / après, planning de la cohorte avec « Émarger » sur leurs demi-journées (QR code à projeter), pointage, slides à insérer |
 | `admin.html` | équipe (connexion) | Tout : participants, séances, journées et checklists de tous les intervenants, suivi, pointage, taux de présence, kit QR, dépenses, recettes, P&L, comptes et rôles, export Excel |
 
 ## Trois accès
