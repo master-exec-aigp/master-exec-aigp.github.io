@@ -4,8 +4,7 @@ Site statique hébergé sur GitHub Pages (`https://master-exec-aigp.github.io`) 
 
 | Page | Accès | Rôle |
 |---|---|---|
-| `index.html` | public | Accueil du programme, liens vers les plannings |
-| `planning.html?cohorte=C4` | public | Planning d'une cohorte avec liens d'émargement ; intégrable dans Canvas (iframe) |
+| `index.html` | public | Accueil du programme et accès aux trois espaces |
 | `checkin.html?e=C4-J01-AM` | public, protégé par le code de séance | Page de pointage ouverte par le QR code |
 | `etudiant.html` | participants (connexion) | Pointage par code de séance (identité connue), présences par certificat, planning et supports de cours de sa cohorte |
 | `prof.html` | intervenants (connexion) | Leurs journées : checklist avant / pendant / après, affichage du QR code en séance, pointage, slides à insérer |
@@ -48,13 +47,7 @@ Depuis *Participants → Dossier*, l'équipe tient pour chaque participant : ide
 
 ## Intégration Canvas
 
-Canvas supprime le JavaScript des pages mais accepte les iframes. Dans *Paramètres & Canvas* de l'espace équipe, copier l'extrait :
-
-```html
-<p><iframe src="https://master-exec-aigp.github.io/planning.html?cohorte=C4&compact=1" width="100%" height="1200" style="border:0"></iframe></p>
-```
-
-et le coller dans l'éditeur HTML d'une page Canvas. Une version « tableau statique » est aussi proposée.
+Canvas supprime le JavaScript des pages mais accepte le HTML statique. Dans *Paramètres & Canvas* de l'espace équipe, copier le tableau des journées avec liens d'émargement et le coller dans l'éditeur HTML d'une page Canvas. Le planning public (`planning.html`) a été retiré pour l'instant ; le planning reste consultable par les participants connectés dans leur espace. Pour le réactiver, restaurer le fichier depuis l'historique git.
 
 ## Mettre à jour le planning depuis Excel
 
@@ -72,6 +65,6 @@ Le P&L est calculé à la volée : recettes facturées et encaissées par type, 
 
 ## Sécurité
 
-- Lecture publique : `cohortes` et `seances` uniquement (planning). Les codes de séance, participants, présences et données financières ne sont lisibles que par les comptes équipe.
+- Lecture publique : `cohortes` et `seances` uniquement (nécessaire au pointage sans compte ; aucune page publique ne l'affiche pour l'instant). Les codes de séance, participants, présences et données financières ne sont lisibles que par les comptes équipe.
 - Les fonctions `checkin_participants` et `checkin` sont les seules écritures possibles sans compte ; elles exigent le code de séance et la fenêtre de date.
 - Activer l'authentification à deux facteurs sur les comptes GitHub et Supabase de l'organisation.

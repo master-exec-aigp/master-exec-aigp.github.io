@@ -310,7 +310,7 @@
     const seances = D.seances.filter(inScope), ems = D.emargements.filter(inScope);
     const jours = by(seances, (s) => s.jour);
     let html = `<h1>Séances · ${esc(scopeLbl())}</h1><div class="toolbar"><span class="muted small">${seances.length} séances · ${sum(seances, (s) => s.duree)} h planifiées · ${seances.filter(tenue).length} tenues</span><span class="grow"></span>
-      <a class="btn" href="planning.html?cohorte=${esc(S.cohorte)}" target="_blank" rel="noopener">Planning public ↗</a><button class="btn" data-act="exportCsv" data-table="seances">CSV</button><button class="btn primary" data-act="addDay">+ Journée</button></div>`;
+      <button class="btn" data-act="exportCsv" data-table="seances">CSV</button><button class="btn primary" data-act="addDay">+ Journée</button></div>`;
     let lastCert = null;
     Object.keys(jours).map(Number).sort((a, b) => a - b).forEach((j) => {
       const rows = jours[j], s0 = rows[0];
@@ -445,7 +445,7 @@ Mode opératoire côté participants : scanner le QR code, saisir le code de sé
 Vos demi-journées :
 ${lignes}
 
-En cas de problème technique en séance, le lien de secours est ${site}/planning.html et l'équipe du programme peut enregistrer les présences manuellement.
+En cas de problème technique en séance, les participants peuvent pointer depuis leur espace ${site}/etudiant.html avec le code, et l'équipe du programme peut enregistrer les présences manuellement.
 
 Merci et bonne séance,
 L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
@@ -698,7 +698,7 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
   views.params = () => {
     const coh = S.cohorte !== "all" ? S.cohorte : D.cohortes.at(-1)?.id || "C4";
     const site = CFG.SITE_URL || "";
-    const iframe = `<p><iframe src="${site}/planning.html?cohorte=${coh}&amp;compact=1" width="100%" height="1200" style="border:0" title="Planning et émargement"></iframe></p>`;
+
     const ems = D.emargements.filter((e) => e.cohorte === coh);
     const jours = by(ems, (e) => e.jour);
     const tableHtml = `<table style="border-collapse:collapse;width:100%"><thead><tr style="background:#1B75BC;color:#fff"><th style="padding:6px;text-align:left">Jour</th><th style="padding:6px;text-align:left">Date</th><th style="padding:6px;text-align:left">Certificat</th><th style="padding:6px;text-align:left">Émargement</th></tr></thead><tbody>` +
@@ -724,12 +724,11 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
         { h: "", cls: "actions", f: (c) => `<button class="btn sm" data-act="editCohorte" data-id="${esc(c.id)}">Modifier</button>` },
       ], D.cohortes) + `</div>
       <div class="card"><h2>Pages publiques</h2><ul style="margin:0;padding-left:18px"><li>Accueil : <a href="${site}/" target="_blank" rel="noopener">${esc(site)}/</a></li>
-        <li>Planning par cohorte : ${D.cohortes.map((c) => `<a href="${site}/planning.html?cohorte=${c.id}" target="_blank" rel="noopener">${c.id}</a>`).join(" · ")}</li>
+        <li>Planning public : désactivé pour l'instant (le planning reste visible dans l'espace étudiant après connexion).</li>
         <li>Pointage : <span class="mono">${esc(D.cfg.checkin_url)}?e=&lt;id de demi-journée&gt;</span> (accès par QR code et code de séance uniquement)</li></ul></div>
       <div class="card"><h2>À coller dans une page Canvas · ${esc(coh)}</h2>
-        <p class="small muted">Canvas supprime le JavaScript des pages mais accepte les iframes et le HTML statique. Option 1 : l'iframe affiche le planning vivant (mis à jour automatiquement). Option 2 : un tableau statique à recoller quand le planning change. Éditeur de page Canvas → « &lt;/&gt; » (HTML) → coller.</p>
-        <h3>Option 1 · iframe (recommandée)</h3><pre class="snippet" id="snip1">${esc(iframe)}</pre><button class="btn sm" data-act="copyEl" data-el="snip1">Copier</button>
-        <h3 style="margin-top:14px">Option 2 · tableau statique</h3><pre class="snippet" id="snip2">${esc(tableHtml)}</pre><button class="btn sm" data-act="copyEl" data-el="snip2">Copier</button></div>
+        <p class="small muted">Canvas supprime le JavaScript des pages mais accepte le HTML statique. Ce tableau des journées avec les liens d'émargement est à coller dans l'éditeur HTML d'une page Canvas (« &lt;/&gt; »), et à recoller quand le planning change.</p>
+        <pre class="snippet" id="snip2">${esc(tableHtml)}</pre><button class="btn sm" data-act="copyEl" data-el="snip2">Copier</button></div>
       <div class="card"><h2>Sauvegarde</h2><p class="small muted">Export complet de la base en JSON (toutes tables), à conserver régulièrement.</p><button class="btn" data-act="exportJson">Télécharger la sauvegarde JSON</button></div>`;
   };
 
