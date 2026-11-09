@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Espace intervenants — Master Exécutif AIGP</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231B75BC'/%3E%3Ctext x='16' y='22' font-size='16' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3EME%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-space="prof">
+
+<!-- Connexion -->
+<section id="login" class="public" hidden>
+  <img class="logo" src="assets/logo.png" alt="UM6P | AIM | UNESCO">
+  <div class="card">
+    <h1>Espace intervenants</h1>
+    <p class="muted">Master Exécutif AIGP. Connectez-vous avec le compte communiqué par l'équipe du programme pour préparer vos journées, afficher le QR code d'émargement en séance et suivre votre checklist. Membre de l'équipe ? <a href="admin.html">Espace équipe</a>.</p>
+    <form id="loginForm" class="stack">
+      <div class="field"><label for="email">E-mail</label><input id="email" type="email" autocomplete="username" required></div>
+      <div class="field"><label for="password">Mot de passe</label><input id="password" type="password" autocomplete="current-password" required></div>
+      <div class="form-actions"><button class="btn primary" type="submit">Se connecter</button></div>
+      <p id="loginErr" class="err small" hidden></p>
+    </form>
+    <p id="configWarn" class="small err" hidden>Le fichier <code>config.js</code> ne contient pas encore l'URL et la clé du projet Supabase.</p>
+  </div>
+</section>
+
+<!-- Application -->
+<div id="app" class="shell" hidden>
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="assets/logo.png" alt="UM6P | AIM | UNESCO">
+      <strong>Master Exécutif AIGP</strong>
+      <span class="small muted">Espace intervenants</span>
+    </div>
+    <nav class="nav" id="nav">
+      <button data-view="prof"><span class="ico">☑</span>Mes journées</button>
+      <button data-view="pointage"><span class="ico">✓</span>Pointage</button>
+      <button data-view="kit"><span class="ico">▣</span>Slides QR à insérer</button>
+    </nav>
+    <div class="foot"><span id="who"></span><br><button class="btn sm" id="logout" type="button">Se déconnecter</button></div>
+  </aside>
+  <main>
+    <div class="topbar">
+      <div class="scope">
+        <label for="cohorte" class="muted small">Cohorte</label>
+        <select id="cohorte"><option value="all">Toutes les cohortes</option></select>
+      </div>
+      <div class="scope"><button class="btn sm" id="reload" type="button">↻ Actualiser</button></div>
+    </div>
+    <div id="view"><div class="empty">Chargement des données…</div></div>
+  </main>
+</div>
+
+<dialog id="modal"></dialog>
+<div id="toast" class="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

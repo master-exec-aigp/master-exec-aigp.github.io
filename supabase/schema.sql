@@ -100,9 +100,65 @@ create table if not exists config (
 );
 
 -- ---------------------------------------------------------------------------
--- Sécurité : les utilisateurs connectés (équipe) ont tous les droits ;
--- les visiteurs anonymes (participants qui scannent le QR) ne passent que par
--- deux fonctions contrôlées par le code de séance.
+-- Comptes et rôles. Les comptes sont créés dans Supabase (Authentication → Users) ;
+-- la table profils leur attribue un rôle : 'admin' (équipe) ou 'intervenant'.
+-- Pour un intervenant, la colonne intervenant est un fragment de son nom tel
+-- qu'il apparaît dans le planning (ex. 'Gouvier') : il voit et gère les journées
+-- dont le champ intervenant contient ce fragment.
+-- ---------------------------------------------------------------------------
+create table if not exists profils (
+  email text primary key,
+  nom text not null default '',
+  role text not null default 'intervenant' check (role in ('admin','intervenant')),
+  intervenant text not null default '',
+  created_at timestamptz not null default now()
+);
+
+-- Checklist de journée (avant / pendant / après le cours), cochée par l'intervenant ou l'équipe.
+create table if not exists checklist (
+  id bigserial primary key,
+  cohorte text not null references cohortes(id) on delete cascade,
+  jour int not null,
+  item text not null,                 -- identifiant de l'élément (config.checklist)
+  fait boolean not null default false,
+  fait_par text default '',
+  fait_le timestamptz,
+  commentaire text default '',
+  unique (cohorte, jour, item)
+);
+
+create or replace function app_role() returns text
+language sql stable security definer set search_path = public as $$
+  select role from profils where lower(email) = lower(coalesce(auth.email(), ''))
+$$;
+create or replace function app_intervenant() returns text
+language sql stable security definer set search_path = public as $$
+  select nullif(trim(intervenant), '') from profils where lower(email) = lower(coalesce(auth.email(), ''))
+$$;
+create or replace function est_mon_cours(interv text) returns boolean
+language sql stable as $$
+  select app_intervenant() is not null and lower(coalesce(interv, '')) like '%' || lower(app_intervenant()) || '%'
+$$;
+create or replace function ma_journee(p_cohorte text, p_jour int) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from seances s where s.cohorte = p_cohorte and s.jour = p_jour and est_mon_cours(s.intervenant))
+$$;
+create or replace function mon_emargement(p_em text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from emargements e where e.id = p_em and (est_mon_cours(e.intervenant) or ma_journee(e.cohorte, e.jour)))
+$$;
+
+-- Vue minimale des participants pour les intervenants (pas de coordonnées ni de finances).
+create or replace view participants_min as
+  select id, cohorte, nom, prenom, statut from participants;
+revoke all on participants_min from anon;
+grant select on participants_min to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Sécurité (RLS)
+--   admin        : tout.
+--   intervenant  : planning en lecture, ses journées (checklist, présences, séances) en écriture.
+--   anon         : planning en lecture ; pointage via les fonctions checkin_* uniquement.
 -- ---------------------------------------------------------------------------
 alter table cohortes     enable row level security;
 alter table participants enable row level security;
@@ -112,20 +168,48 @@ alter table presences    enable row level security;
 alter table depenses     enable row level security;
 alter table recettes     enable row level security;
 alter table config       enable row level security;
+alter table profils      enable row level security;
+alter table checklist    enable row level security;
 
 do $$ declare t text;
 begin
-  foreach t in array array['cohortes','participants','emargements','seances','presences','depenses','recettes','config'] loop
+  foreach t in array array['cohortes','participants','emargements','seances','presences','depenses','recettes','config','profils','checklist'] loop
     execute format('drop policy if exists equipe_tout on %I', t);
-    execute format('create policy equipe_tout on %I for all to authenticated using (true) with check (true)', t);
+    execute format('drop policy if exists admin_tout on %I', t);
+    execute format('create policy admin_tout on %I for all to authenticated using (app_role() = ''admin'') with check (app_role() = ''admin'')', t);
   end loop;
 end $$;
 
--- Lecture publique du planning (pour la page planning intégrée dans Canvas).
+-- Lecture du planning : public (page planning.html) et comptes connectés.
 drop policy if exists public_lecture on seances;
-create policy public_lecture on seances for select to anon using (true);
+create policy public_lecture on seances for select to anon, authenticated using (true);
 drop policy if exists public_lecture on cohortes;
-create policy public_lecture on cohortes for select to anon using (true);
+create policy public_lecture on cohortes for select to anon, authenticated using (true);
+drop policy if exists lecture_config on config;
+create policy lecture_config on config for select to authenticated using (true);
+
+-- Intervenants
+drop policy if exists interv_seances on seances;
+create policy interv_seances on seances for update to authenticated using (est_mon_cours(intervenant)) with check (est_mon_cours(intervenant));
+drop policy if exists interv_emargements on emargements;
+create policy interv_emargements on emargements for select to authenticated using (est_mon_cours(intervenant) or ma_journee(cohorte, jour));
+drop policy if exists interv_emargements_maj on emargements;
+create policy interv_emargements_maj on emargements for update to authenticated using (est_mon_cours(intervenant) or ma_journee(cohorte, jour)) with check (est_mon_cours(intervenant) or ma_journee(cohorte, jour));
+drop policy if exists interv_presences_lecture on presences;
+create policy interv_presences_lecture on presences for select to authenticated using (mon_emargement(emargement));
+drop policy if exists interv_presences_ecriture on presences;
+create policy interv_presences_ecriture on presences for insert to authenticated with check (mon_emargement(emargement));
+drop policy if exists interv_presences_maj on presences;
+create policy interv_presences_maj on presences for update to authenticated using (mon_emargement(emargement)) with check (mon_emargement(emargement));
+drop policy if exists interv_checklist on checklist;
+create policy interv_checklist on checklist for all to authenticated using (ma_journee(cohorte, jour)) with check (ma_journee(cohorte, jour));
+
+-- Profils : chacun lit le sien ; le premier compte connecté sur une table vide devient admin.
+drop policy if exists profil_propre on profils;
+create policy profil_propre on profils for select to authenticated using (lower(email) = lower(coalesce(auth.email(), '')));
+drop policy if exists profil_amorcage on profils;
+create policy profil_amorcage on profils for insert to authenticated
+  with check (lower(email) = lower(coalesce(auth.email(), '')) and role = 'admin' and not exists (select 1 from profils));
 
 -- Pointage : la liste des participants n'est renvoyée que si le code est bon.
 create or replace function checkin_participants(p_emargement text, p_code text)

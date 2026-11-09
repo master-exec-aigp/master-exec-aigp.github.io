@@ -9,14 +9,14 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
 <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body data-space="admin">
 
 <!-- Connexion -->
 <section id="login" class="public" hidden>
   <img class="logo" src="assets/logo.png" alt="UM6P | AIM | UNESCO">
   <div class="card">
-    <h1>Gestion du Master Exécutif AIGP</h1>
-    <p class="muted">Espace réservé à l'équipe du programme. Connectez-vous avec le compte créé par l'administrateur.</p>
+    <h1>Espace équipe</h1>
+    <p class="muted">Gestion du Master Exécutif AIGP. Réservé à l'équipe du programme. Intervenant ? <a href="prof.html">Accédez à votre espace</a>.</p>
     <form id="loginForm" class="stack">
       <div class="field"><label for="email">E-mail</label><input id="email" type="email" autocomplete="username" required></div>
       <div class="field"><label for="password">Mot de passe</label><input id="password" type="password" autocomplete="current-password" required></div>
@@ -36,16 +36,18 @@
       <span class="small muted">Gestion administrative</span>
     </div>
     <nav class="nav" id="nav">
-      <button data-view="dash"><span class="ico">◧</span>Tableau de bord</button>
-      <button data-view="participants"><span class="ico">☺</span>Participants</button>
-      <button data-view="seances"><span class="ico">▦</span>Séances</button>
+      <button data-view="dash" data-role="admin"><span class="ico">◧</span>Tableau de bord</button>
+      <button data-view="participants" data-role="admin"><span class="ico">☺</span>Participants</button>
+      <button data-view="seances" data-role="admin"><span class="ico">▦</span>Séances</button>
+      <button data-view="prof"><span class="ico">☑</span>Journées &amp; checklists</button>
+      <button data-view="suivi" data-role="admin"><span class="ico">◔</span>Suivi intervenants</button>
       <button data-view="pointage"><span class="ico">✓</span>Pointage</button>
-      <button data-view="taux"><span class="ico">%</span>Taux de présence</button>
+      <button data-view="taux" data-role="admin"><span class="ico">%</span>Taux de présence</button>
       <button data-view="kit"><span class="ico">▣</span>Kit QR intervenants</button>
-      <button data-view="depenses"><span class="ico">−</span>Dépenses</button>
-      <button data-view="recettes"><span class="ico">+</span>Recettes</button>
-      <button data-view="pnl"><span class="ico">Σ</span>P&amp;L</button>
-      <button data-view="params"><span class="ico">⚙</span>Paramètres &amp; Canvas</button>
+      <button data-view="depenses" data-role="admin"><span class="ico">−</span>Dépenses</button>
+      <button data-view="recettes" data-role="admin"><span class="ico">+</span>Recettes</button>
+      <button data-view="pnl" data-role="admin"><span class="ico">Σ</span>P&amp;L</button>
+      <button data-view="params" data-role="admin"><span class="ico">⚙</span>Paramètres, comptes &amp; Canvas</button>
     </nav>
     <div class="foot"><span id="who"></span><br><button class="btn sm" id="logout" type="button">Se déconnecter</button></div>
   </aside>
@@ -54,7 +56,7 @@
       <div class="scope">
         <label for="cohorte" class="muted small">Cohorte</label>
         <select id="cohorte"><option value="all">Toutes les cohortes</option></select>
-        <button class="btn sm" data-act="addCohorte" type="button" title="Créer une cohorte, éventuellement en répliquant le planning d'une cohorte existante">+ Cohorte</button>
+        <button class="btn sm" data-act="addCohorte" data-role="admin" type="button" title="Créer une cohorte, éventuellement en répliquant le planning d'une cohorte existante">+ Cohorte</button>
       </div>
       <div class="scope"><button class="btn sm" id="reload" type="button">↻ Actualiser</button></div>
     </div>

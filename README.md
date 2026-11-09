@@ -7,12 +7,27 @@ Site statique hébergé sur GitHub Pages (`https://master-exec-aigp.github.io`) 
 | `index.html` | public | Accueil du programme, liens vers les plannings |
 | `planning.html?cohorte=C4` | public | Planning d'une cohorte avec liens d'émargement ; intégrable dans Canvas (iframe) |
 | `checkin.html?e=C4-J01-AM` | public, protégé par le code de séance | Page de pointage ouverte par le QR code |
-| `admin.html` | équipe (connexion) | Participants, séances, pointage, taux de présence, kit QR, dépenses, recettes, P&L, export Excel |
+| `prof.html` | intervenants (connexion) | Leurs journées : checklist avant / pendant / après, affichage du QR code en séance, pointage, slides à insérer |
+| `admin.html` | équipe (connexion) | Tout : participants, séances, journées et checklists de tous les intervenants, suivi, pointage, taux de présence, kit QR, dépenses, recettes, P&L, comptes et rôles, export Excel |
+
+## Trois accès
+
+| Accès | Compte | Voit | Fait |
+|---|---|---|---|
+| **Participant** | aucun | planning public de sa cohorte | pointe sa présence par QR code + code de séance + choix de son nom |
+| **Intervenant** | e-mail + mot de passe, rôle `intervenant` | uniquement les journées dont le champ intervenant du planning contient son nom ; liste des participants réduite (nom, prénom, statut) | coche sa checklist, affiche le QR code en séance (ce qui coche l'étape « pendant »), régénère le code, pointe manuellement, télécharge ses slides |
+| **Équipe** | e-mail + mot de passe, rôle `admin` | tout | tout, y compris le suivi des checklists de tous les intervenants et la gestion des comptes |
+
+La séparation est appliquée par la base (politiques RLS de `supabase/schema.sql`), pas seulement par l'interface : un intervenant connecté sur `admin.html` est renvoyé vers `prof.html`, et une requête directe à l'API ne lui renvoie que ses données. Les participants n'ont aucun compte et ne peuvent lire que le planning.
+
+### Checklist intervenant
+
+Par journée de cours, trois phases dont les éléments sont modifiables dans *Paramètres* (par défaut : supports transmis à J-7, slide QR insérée, logistique confirmée ; QR affiché matin et après-midi, présences vérifiées ; évaluation envoyée aux participants, supports déposés sur Canvas, travaux communiqués). Chaque coche garde qui l'a faite et quand. L'équipe voit l'ensemble dans *Suivi intervenants*, avec alerte rouge si la phase « avant » n'est pas complète à moins de 7 jours de la séance.
 
 ## Mise en service (une fois)
 
 1. **Supabase** : créer un projet gratuit sur supabase.com (région Europe). Dans *SQL Editor*, exécuter `supabase/schema.sql` puis `supabase/seed.sql` (plannings des cohortes 2, 3 et 4 issus du fichier Excel).
-2. **Comptes équipe** : *Authentication → Providers → Email* : désactiver « Allow new users to sign up ». *Authentication → Users → Add user* : créer un compte (e-mail + mot de passe) pour chaque membre de l'équipe. Seuls ces comptes voient et modifient les données.
+2. **Comptes** : *Authentication → Providers → Email* : désactiver « Allow new users to sign up ». *Authentication → Users → Add user* : créer un compte (e-mail + mot de passe) pour chaque membre de l'équipe et chaque intervenant. Le **premier compte qui se connecte** devient automatiquement « équipe » ; il déclare ensuite les autres comptes et leur rôle dans *Paramètres → Comptes & rôles* (pour un intervenant, indiquer le fragment de son nom tel qu'il apparaît dans le planning, par exemple « Gouvier »).
 3. **Configuration** : copier dans `config.js` l'URL du projet et la clé `anon` (*Project Settings → API*). Cette clé est publique par conception ; la protection vient des politiques RLS du schéma.
 4. **Publication** : pousser ce dépôt dans l'organisation GitHub sous le nom `master-exec-aigp.github.io` (branche `main`). GitHub Pages est activé automatiquement pour un dépôt portant ce nom ; sinon *Settings → Pages → Deploy from branch → main / root*.
 

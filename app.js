@@ -27,9 +27,12 @@
   const STATUTS_S = ["Planifié", "Réalisé", "Reporté", "Annulé"];
   const HORAIRES = { S1: "09:00–10:30", S2: "10:45–12:15", S3: "14:00–15:30", S4: "15:45–17:15" };
 
-  const S = { view: "dash", cohorte: "all", data: {}, ui: {} };
+  const SPACE = document.body.dataset.space || "admin"; // "admin" (équipe) ou "prof" (intervenants)
+  const S = { view: SPACE === "prof" ? "prof" : "dash", cohorte: "all", data: {}, ui: {}, role: null, me: null };
   const D = S.data;
   const views = {};
+  const isAdmin = () => S.role === "admin";
+  const PHASES = [["avant", "Avant le cours"], ["pendant", "Pendant le cours"], ["apres", "Après le cours"]];
 
   /* ---------- Chargement ---------- */
   async function fetchAll(table, order) {
@@ -46,13 +49,16 @@
     return out;
   }
   async function loadAll() {
-    const tables = ["cohortes", "participants", "seances", "emargements", "presences", "depenses", "recettes", "config"];
+    const tables = isAdmin() ? ["cohortes", "participants", "seances", "emargements", "presences", "depenses", "recettes", "config", "profils", "checklist"]
+      : ["cohortes", "participants_min", "seances", "emargements", "presences", "config", "checklist"];
     const res = await Promise.all(tables.map((t) => fetchAll(t)));
-    tables.forEach((t, i) => (D[t] = res[i]));
+    tables.forEach((t, i) => (D[t === "participants_min" ? "participants" : t] = res[i]));
+    if (!isAdmin()) { D.depenses = []; D.recettes = []; D.profils = []; }
+    D.cfg = Object.fromEntries(D.config.map((c) => [c.cle, c.valeur]));
+    D.cfg.checklist ||= [];
     D.participants.sort((a, b) => (a.nom + a.prenom).localeCompare(b.nom + b.prenom, "fr"));
     D.seances.sort((a, b) => a.cohorte.localeCompare(b.cohorte) || a.jour - b.jour || a.creneau.localeCompare(b.creneau));
     D.emargements.sort((a, b) => a.cohorte.localeCompare(b.cohorte) || a.jour - b.jour || a.demi.localeCompare(b.demi));
-    D.cfg = Object.fromEntries(D.config.map((c) => [c.cle, c.valeur]));
     D.cfg.certificats ||= { C1: "AI Foundations", C2: "AI Applications", C3: "AI Analytics & Data Science", C4: "Robotics & Autonomous Systems", C5: "AI Governance", C6: "AI Transformation" };
     D.cfg.categories_depenses ||= ["Honoraires intervenants", "Logistique & salles", "Restauration", "Communication & marketing", "Autre"];
     D.cfg.seuil_presence ||= 70;
@@ -63,6 +69,7 @@
     S.cohorte = sel.value;
   }
   async function reload(table) {
+    if (table === "participants" && !isAdmin()) { D.participants = await fetchAll("participants_min"); render(); return; }
     D[table] = await fetchAll(table);
     if (table === "participants") D.participants.sort((a, b) => (a.nom + a.prenom).localeCompare(b.nom + b.prenom, "fr"));
     if (table === "seances") D.seances.sort((a, b) => a.cohorte.localeCompare(b.cohorte) || a.jour - b.jour || a.creneau.localeCompare(b.creneau));
@@ -113,6 +120,19 @@
     return out;
   }
   const checkinUrl = (emId) => `${D.cfg.checkin_url}?e=${encodeURIComponent(emId)}`;
+  /* Journées (cohorte + jour) : unité de la checklist intervenant */
+  const monCours = (interv) => !isAdmin() && S.me && S.me.intervenant && norm(interv).includes(norm(S.me.intervenant));
+  function journees() {
+    const map = {};
+    D.seances.filter(inScope).forEach((s) => {
+      const k = `${s.cohorte}|${s.jour}`;
+      const j = (map[k] ||= { key: k, cohorte: s.cohorte, jour: s.jour, date: s.date, certificat: s.certificat, seances: [], intervenants: new Set() });
+      j.seances.push(s); if (s.intervenant) j.intervenants.add(s.intervenant);
+    });
+    return Object.values(map).map((j) => ({ ...j, intervenants: [...j.intervenants], ems: D.emargements.filter((e) => e.cohorte === j.cohorte && e.jour === j.jour), ticks: Object.fromEntries(D.checklist.filter((c) => c.cohorte === j.cohorte && c.jour === j.jour).map((c) => [c.item, c])) }))
+      .sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999") || a.jour - b.jour);
+  }
+  const progress = (j, phase) => { const items = D.cfg.checklist.filter((i) => !phase || i.phase === phase); return { done: items.filter((i) => j.ticks[i.id]?.fait).length, total: items.length }; };
 
   /* ---------- UI génériques ---------- */
   let toastT;
@@ -319,11 +339,11 @@
     const ems = D.emargements.filter(inScope);
     const intervs = uniq(ems.map((e) => e.intervenant).filter(Boolean)).sort();
     const sel = S.ui.interv || "";
-    const list = ems.filter((e) => (!sel || e.intervenant === sel) && (S.ui.kitAll || !e.date || e.date >= today()));
+    const list = ems.filter((e) => (!sel || e.intervenant === sel) && (!S.ui.kitDay || `${e.cohorte}|${e.jour}` === S.ui.kitDay) && (S.ui.kitAll || S.ui.kitDay || !e.date || e.date >= today()));
     const html = `<h1>Kit QR intervenants <span class="muted" style="font-weight:400;font-size:1rem">· ${esc(scopeLbl())}</span></h1>
       <div class="toolbar no-print"><select data-ui="interv"><option value="">Tous les intervenants</option>${intervs.map((i) => `<option ${i === sel ? "selected" : ""}>${esc(i)}</option>`).join("")}</select>
-      <label class="small"><input type="checkbox" data-ui="kitAll" ${S.ui.kitAll ? "checked" : ""}> inclure les séances passées</label><span class="grow"></span>
-      <button class="btn" data-act="mailText" ${sel ? "" : "disabled"}>Copier le texte du mail</button><button class="btn" data-act="dlAll" ${list.length ? "" : "disabled"}>Télécharger les PNG</button><button class="btn primary" data-act="print" ${list.length ? "" : "disabled"}>Imprimer / PDF</button></div>
+      <label class="small"><input type="checkbox" data-ui="kitAll" ${S.ui.kitAll ? "checked" : ""}> inclure les séances passées</label>${S.ui.kitDay ? `<span class="pill info">journée ${esc(S.ui.kitDay.replace("|", " · J"))} <a href="#" data-act="kitClear" style="margin-left:6px">×</a></span>` : ""}<span class="grow"></span>
+      ${isAdmin() ? `<button class="btn" data-act="mailText" ${sel ? "" : "disabled"}>Copier le texte du mail</button>` : ""}<button class="btn" data-act="dlAll" ${list.length ? "" : "disabled"}>Télécharger les PNG</button><button class="btn primary" data-act="print" ${list.length ? "" : "disabled"}>Imprimer / PDF</button></div>
       <p class="small muted no-print">Chaque slide (16:9) contient le QR code de la demi-journée et son code à 4 chiffres. L'intervenant l'affiche en début de séance ; le participant scanne, saisit le code et choisit son nom. Lien de pointage : <span class="mono">${esc(D.cfg.checkin_url)}?e=…</span></p>
       <div class="slides">${list.map((e) => `<div class="slide-card card"><canvas data-slide="${esc(e.id)}" width="1600" height="900"></canvas><div class="meta"><span><strong>${esc(e.id)}</strong> · ${esc(fmtDate(e.date))} · ${e.demi === "AM" ? "matin" : "après-midi"}<br><span class="small muted">${esc(e.intervenant || "intervenant à préciser")}</span></span><span><button class="btn sm" data-act="copyLink" data-em="${esc(e.id)}">Lien</button><button class="btn sm" data-act="dlOne" data-em="${esc(e.id)}">PNG</button></span></div></div>`).join("")}</div>
       ${!list.length ? '<div class="empty">Aucune demi-journée à venir pour cette sélection.</div>' : ""}`;
@@ -384,6 +404,78 @@ En cas de problème technique en séance, le lien de secours est ${site}/plannin
 Merci et bonne séance,
 L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
   }
+
+  /* ---------- Vue : mes journées (intervenant) / journées (admin) ---------- */
+  views.prof = () => {
+    let js = journees();
+    if (!isAdmin()) js = js.filter((j) => j.intervenants.some(monCours));
+    if (S.ui.profInterv) js = js.filter((j) => j.intervenants.some((i) => i === S.ui.profInterv));
+    if (!S.ui.profAll) js = js.filter((j) => !j.date || j.date >= new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10));
+    const intervs = uniq(journees().flatMap((j) => j.intervenants)).sort();
+    const bar = (j) => { const p = progress(j); return `<span class="pill ${p.done === p.total && p.total ? "ok" : p.done ? "warn" : ""}">${p.done}/${p.total}</span>`; };
+    let html = `<h1>${isAdmin() ? "Journées de cours" : "Mes journées"} <span class="muted" style="font-weight:400;font-size:1rem">· ${esc(scopeLbl())}</span></h1>
+      <div class="toolbar">${isAdmin() ? `<select data-ui="profInterv"><option value="">Tous les intervenants</option>${intervs.map((i) => `<option ${i === S.ui.profInterv ? "selected" : ""}>${esc(i)}</option>`).join("")}</select>` : ""}
+      <label class="small"><input type="checkbox" data-ui="profAll" ${S.ui.profAll ? "checked" : ""}> inclure les journées passées</label><span class="grow"></span>
+      ${!isAdmin() ? `<span class="small muted">Connecté comme ${esc(S.me.nom || S.me.email)} · filtre « ${esc(S.me.intervenant)} »</span>` : ""}</div>`;
+    if (!js.length) return html + `<div class="empty">${isAdmin() ? "Aucune journée pour cette sélection." : "Aucune journée ne vous est attribuée. Si vous intervenez prochainement, demandez à l'équipe de vérifier votre nom dans le planning."}</div>`;
+    js.forEach((j) => {
+      const open = S.ui.openDay === j.key || (!S.ui.openDay && js[0] === j);
+      html += `<div class="jour"><header style="cursor:pointer" data-act="openDay" data-key="${esc(j.key)}"><strong>${esc(j.cohorte)} · Jour ${j.jour}</strong><span>${esc(fmtDate(j.date, true))}</span><span class="muted small">${esc(certLbl(j.certificat))}</span><span class="muted small">${esc(j.intervenants.join(", "))}</span><span style="flex:1"></span>${bar(j)}<span class="muted">${open ? "▾" : "▸"}</span></header>`;
+      if (open) {
+        html += `<div style="padding:12px"><div class="grid2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">`;
+        PHASES.forEach(([ph, lbl]) => {
+          const items = D.cfg.checklist.filter((i) => i.phase === ph); const p = progress(j, ph);
+          html += `<div><h3 style="display:flex;justify-content:space-between">${lbl} <span class="pill ${p.done === p.total && p.total ? "ok" : ""}">${p.done}/${p.total}</span></h3>` +
+            items.map((i) => { const t = j.ticks[i.id]; return `<label style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;cursor:pointer"><input type="checkbox" data-act="tick" data-key="${esc(j.key)}" data-item="${esc(i.id)}" ${t?.fait ? "checked" : ""} style="margin-top:4px"><span>${esc(i.libelle)}${t?.fait ? `<br><span class="small muted">${esc(t.fait_par || "")} · ${t.fait_le ? new Date(t.fait_le).toLocaleDateString("fr-FR") : ""}</span>` : ""}</span></label>`; }).join("") + `</div>`;
+        });
+        html += `</div><div class="toolbar" style="margin:14px 0 0"><span class="small muted">Séances : ${esc(uniq(j.seances.map((s) => s.cours).filter(Boolean)).join(" / ") || "intitulés à préciser")}</span><span class="grow"></span>` +
+          j.ems.map((e) => `<button class="btn sm primary" data-act="projeter" data-id="${esc(e.id)}" data-key="${esc(j.key)}">▣ QR code ${e.demi === "AM" ? "matin" : "après-midi"}</button>`).join("") +
+          j.ems.map((e) => `<button class="btn sm" data-act="go" data-view="pointage" data-em="${esc(e.id)}">Pointage ${e.demi === "AM" ? "matin" : "après-midi"} (${D.presences.filter((p) => p.emargement === e.id && p.statut === "Présent").length})</button>`).join("") +
+          `<button class="btn sm" data-act="goKit" data-key="${esc(j.key)}">Slides à insérer</button></div></div>`;
+      }
+      html += `</div>`;
+    });
+    return html;
+  };
+
+  /* ---------- Vue : projection du QR code en séance ---------- */
+  views.projeter = () => {
+    const em = D.emargements.find((e) => e.id === S.ui.proj);
+    if (!em) return `<div class="empty">Choisissez une demi-journée dans « Mes journées ».</div>`;
+    const n = D.presences.filter((p) => p.emargement === em.id && p.statut === "Présent").length;
+    const cours = uniq(seancesOf(em.id).map((s) => s.cours).filter(Boolean));
+    setTimeout(() => { const cv = $("#projQr"); if (!cv) return; const ctx = cv.getContext("2d"); const qr = qrcode(0, "M"); qr.addData(checkinUrl(em.id)); qr.make(); const m = qr.getModuleCount(), size = cv.width, cell = size / m; ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, size, size); ctx.fillStyle = "#000"; for (let r = 0; r < m; r++) for (let c = 0; c < m; c++) if (qr.isDark(r, c)) ctx.fillRect(c * cell, r * cell, Math.ceil(cell), Math.ceil(cell)); }, 0);
+    return `<div class="toolbar no-print"><button class="btn" data-act="go" data-view="prof">← Retour</button><span class="grow"></span><span class="pill ok" id="projCount">${n} présent(s)</span><button class="btn" data-act="refreshProj">↻ Actualiser</button><button class="btn" data-act="newCode" data-id="${esc(em.id)}">Nouveau code</button><button class="btn primary" data-act="fullscreen">Plein écran</button></div>
+      <div class="card" id="projCard" style="text-align:center;padding:32px 16px">
+        <img src="assets/logo.png" alt="UM6P | AIM | UNESCO" style="width:min(100%,520px)">
+        <h1 style="font-size:clamp(1.6rem,4vw,2.6rem);margin-top:16px">Émargement · ${em.demi === "AM" ? "matin" : "après-midi"}</h1>
+        <p style="color:var(--rouge);font-weight:600;font-size:clamp(1rem,2.5vw,1.4rem);margin:0 0 20px">${esc(fmtDate(em.date, true))} · ${esc(em.cohorte)} · ${esc(certLbl(em.certificat))}${cours.length ? "<br>" + esc(cours.join(" / ")) : ""}</p>
+        <div style="display:flex;flex-wrap:wrap;gap:40px;justify-content:center;align-items:center">
+          <canvas id="projQr" width="560" height="560" style="width:min(80vw,420px);height:auto;border:1px solid var(--bord);border-radius:10px;background:#fff"></canvas>
+          <div style="text-align:left;max-width:420px">
+            <div class="muted" style="text-transform:uppercase;letter-spacing:.1em;font-size:.9rem">Code de séance</div>
+            <div class="mono" style="font-size:clamp(3rem,10vw,6.5rem);font-weight:700;color:var(--bleu);letter-spacing:.2em;line-height:1.1">${esc(em.code)}</div>
+            <ol style="font-size:clamp(1rem,2.2vw,1.35rem);padding-left:22px;margin:16px 0 0"><li>Scannez le QR code</li><li>Saisissez le code de séance</li><li>Sélectionnez votre nom</li></ol>
+            <p class="muted" style="margin-top:14px;word-break:break-all">${esc(checkinUrl(em.id).replace(/^https?:\/\//, ""))}</p>
+          </div></div></div>`;
+  };
+
+  /* ---------- Vue : suivi intervenants (admin) ---------- */
+  views.suivi = () => {
+    let js = journees().filter((j) => S.ui.suiviAll || !j.date || j.date >= new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10));
+    const soon = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+    const cell = (j, ph) => { const p = progress(j, ph); if (!p.total) return "—"; const late = p.done < p.total && j.date && ((ph === "avant" && j.date <= soon) || (ph !== "avant" && j.date < today())); return `<span class="pill ${p.done === p.total ? "ok" : late ? "bad" : p.done ? "warn" : ""}">${p.done}/${p.total}</span>`; };
+    const prof = (i) => D.profils.find((p) => p.intervenant && norm(i).includes(norm(p.intervenant)));
+    return `<h1>Suivi des intervenants <span class="muted" style="font-weight:400;font-size:1rem">· ${esc(scopeLbl())}</span></h1>
+      <div class="toolbar"><label class="small"><input type="checkbox" data-ui="suiviAll" ${S.ui.suiviAll ? "checked" : ""}> inclure les journées passées</label><span class="grow"></span><span class="small muted">Rouge : étape « avant » incomplète à moins de 7 jours, ou étape « pendant / après » incomplète pour une journée passée.</span></div>` +
+      table([
+        { h: "Journée", f: (j) => `<strong>${esc(j.cohorte)} · J${String(j.jour).padStart(2, "0")}</strong><br><span class="small muted">${esc(fmtDate(j.date))} · ${esc(j.certificat)}</span>` },
+        { h: "Intervenant(s)", f: (j) => j.intervenants.map((i) => { const p = prof(i); return `${esc(i)} ${p ? '<span class="pill info" title="compte intervenant lié">compte</span>' : '<span class="pill" title="aucun compte intervenant ne correspond">sans compte</span>'}`; }).join("<br>") || '<span class="muted">—</span>' },
+        { h: "Avant", f: (j) => cell(j, "avant") }, { h: "Pendant", f: (j) => cell(j, "pendant") }, { h: "Après", f: (j) => cell(j, "apres") },
+        { h: "Présences", num: true, f: (j) => j.ems.map((e) => D.presences.filter((p) => p.emargement === e.id && p.statut === "Présent").length).join(" / ") || "—" },
+        { h: "", cls: "actions", f: (j) => `<button class="btn sm" data-act="openDay" data-key="${esc(j.key)}" data-view="prof">Détail</button>` },
+      ], js);
+  };
 
   /* ---------- Vue : dépenses ---------- */
   const depenseFields = (d = {}) => [
@@ -504,7 +596,15 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
         <div class="field"><label for="cfg_url">URL de la page de pointage</label><input id="cfg_url" value="${esc(D.cfg.checkin_url)}"><span class="small muted">Encodée dans les QR codes. Changer cette URL invalide les slides déjà distribuées.</span></div>
         <div class="field"><label for="cfg_seuil">Seuil de présence (%)</label><input id="cfg_seuil" type="number" min="0" max="100" value="${esc(D.cfg.seuil_presence)}"></div>
         <div class="field full"><label for="cfg_cats">Catégories de dépenses (une par ligne)</label><textarea id="cfg_cats" style="min-height:120px">${esc(D.cfg.categories_depenses.join("\n"))}</textarea></div>
+        <div class="field full"><label for="cfg_check">Checklist intervenant (une ligne par élément : <span class="mono">avant | libellé</span>, <span class="mono">pendant | libellé</span> ou <span class="mono">apres | libellé</span>)</label><textarea id="cfg_check" style="min-height:190px">${esc(D.cfg.checklist.map((i) => `${i.phase} | ${i.libelle}`).join("\n"))}</textarea><span class="small muted">L'ordre dans chaque phase sert d'identifiant : insérer ou supprimer une ligne décale les coches déjà faites sur les lignes suivantes de cette phase. Reformuler une ligne les conserve.</span></div>
       </div><div class="form-actions"><button class="btn primary" data-act="saveCfg">Enregistrer les paramètres</button></div></div>
+      <div class="card"><h2>Comptes &amp; rôles</h2><div class="toolbar" style="margin:0 0 8px"><span class="small muted">Trois accès : <b>participants</b> sans compte (planning public et pointage par QR + code), <b>intervenants</b> (leurs journées, checklist, pointage et slides QR sur <span class="mono">prof.html</span>), <b>équipe</b> (tout, sur <span class="mono">admin.html</span>). Les comptes sont créés dans Supabase → Authentication → Users, puis déclarés ici.</span><span class="grow"></span><button class="btn primary sm" data-act="addProfil">+ Compte</button></div>` +
+      table([
+        { h: "E-mail", f: (p) => `<strong>${esc(p.email)}</strong>${p.email === S.me.email ? ' <span class="pill info">vous</span>' : ""}` }, { h: "Nom", f: (p) => esc(p.nom) },
+        { h: "Rôle", f: (p) => `<span class="pill ${p.role === "admin" ? "ok" : "info"}">${p.role === "admin" ? "Équipe" : "Intervenant"}</span>` },
+        { h: "Planning", f: (p) => p.role === "admin" ? '<span class="muted">—</span>' : p.intervenant ? `« ${esc(p.intervenant)} » · ${D.seances.filter((s) => norm(s.intervenant).includes(norm(p.intervenant))).length} séance(s)` : '<span class="pill bad">fragment manquant</span>' },
+        { h: "", cls: "actions", f: (p) => `<button class="btn sm" data-act="editProfil" data-id="${esc(p.email)}">Modifier</button>` },
+      ], D.profils) + `</div>
       <div class="card"><h2>Cohortes</h2><div class="toolbar" style="margin:0 0 8px"><span class="small muted">Une cohorte regroupe un planning, des participants et des finances. Le bouton « + Cohorte » en haut de page permet de répliquer le planning d'une cohorte existante.</span><span class="grow"></span><button class="btn primary sm" data-act="addCohorte">+ Cohorte</button></div>` +
       table([
         { h: "Id", f: (c) => `<strong>${esc(c.id)}</strong>` }, { h: "Libellé", f: (c) => esc(c.libelle) }, { h: "Période", f: (c) => `${fmtDate(c.debut)} → ${fmtDate(c.fin)}` },
@@ -524,6 +624,51 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
   /* ---------- Actions ---------- */
   const A = {};
   A.go = (d) => { if (d.em) S.ui.em = d.em; setView(d.view); };
+  A.openDay = (d) => { S.ui.openDay = S.ui.openDay === d.key && !d.view ? "" : d.key; if (d.view) { const [c] = d.key.split("|"); if (S.cohorte !== "all" && S.cohorte !== c) { S.cohorte = c; $("#cohorte").value = c; } S.ui.profAll = true; setView(d.view); } else render(); };
+  A.goKit = (d) => { S.ui.kitDay = d.key; S.ui.interv = ""; setView("kit"); };
+  A.projeter = async (d) => {
+    S.ui.proj = d.id; setView("projeter");
+    /* Coche automatiquement l'étape « pendant » correspondant à la demi-journée (1re ligne = matin, 2e = après-midi). */
+    const em = D.emargements.find((e) => e.id === d.id); const items = D.cfg.checklist.filter((i) => i.phase === "pendant");
+    const item = items.find((i) => norm(i.libelle).includes(em.demi === "AM" ? "matin" : "apres")) || items[em.demi === "AM" ? 0 : 1];
+    const [cohorte, jour] = d.key.split("|");
+    if (item && !D.checklist.some((c) => c.cohorte === cohorte && c.jour === +jour && c.item === item.id && c.fait)) {
+      const { error } = await sb.from("checklist").upsert({ cohorte, jour: +jour, item: item.id, fait: true, fait_par: S.me?.nom || S.me?.email || "", fait_le: new Date().toISOString() }, { onConflict: "cohorte,jour,item" });
+      if (!error) D.checklist = await fetchAll("checklist");
+    }
+  };
+  A.refreshProj = async () => { D.presences = await fetchAll("presences"); render(); toast("Présences actualisées"); };
+  A.newCode = async (d) => { if (!(await confirmDlg("Générer un nouveau code pour cette demi-journée ? Les participants déjà pointés le restent ; le code imprimé sur une slide préparée à l'avance ne sera plus valable.", "Nouveau code"))) return; await write("emargements", "update", { code: rand4() }, d.id); };
+  A.fullscreen = () => { const el = $("#projCard"); if (document.fullscreenElement) document.exitFullscreen(); else if (el?.requestFullscreen) el.requestFullscreen().catch(() => toast("Plein écran indisponible dans ce navigateur", true)); };
+  A.kitClear = () => { S.ui.kitDay = ""; render(); };
+  A.tick = async (d, el) => {
+    const [cohorte, jour] = d.key.split("|"); const fait = el.checked;
+    const row = { cohorte, jour: +jour, item: d.item, fait, fait_par: fait ? (S.me?.nom || S.me?.email || "") : "", fait_le: fait ? new Date().toISOString() : null };
+    const { error } = await sb.from("checklist").upsert(row, { onConflict: "cohorte,jour,item" });
+    if (error) { el.checked = !fait; return toast(error.message, true); }
+    await reload("checklist");
+  };
+  A.addProfil = async () => {
+    const v = await openForm({ title: "Nouveau compte", intro: "Créez d'abord le compte (e-mail + mot de passe) dans Supabase → Authentication → Users, puis déclarez ici son rôle avec le même e-mail.", fields: [
+      { k: "email", label: "E-mail du compte", type: "email", required: true, full: true }, { k: "nom", label: "Nom affiché", required: true },
+      { k: "role", label: "Rôle", type: "select", options: [["intervenant", "Intervenant : ses journées, checklist, pointage, slides QR"], ["admin", "Équipe : accès complet"]], value: "intervenant" },
+      { k: "intervenant", label: "Fragment du nom dans le planning", help: "Ex. « Gouvier » ou « Otberdout » : l'intervenant voit toutes les journées dont le champ intervenant contient ce texte. Vide pour un compte équipe." },
+    ], submit: "Créer" });
+    if (!v) return; v.email = v.email.trim().toLowerCase();
+    const { error } = await sb.from("profils").insert(v); if (error) return toast(error.message, true);
+    await reload("profils"); toast("Compte déclaré");
+  };
+  A.editProfil = async (d) => {
+    const p = D.profils.find((x) => x.email === d.id);
+    const v = await openForm({ title: p.email, fields: [
+      { k: "nom", label: "Nom affiché", value: p.nom, required: true }, { k: "role", label: "Rôle", type: "select", options: [["intervenant", "Intervenant"], ["admin", "Équipe"]], value: p.role },
+      { k: "intervenant", label: "Fragment du nom dans le planning", value: p.intervenant, full: true },
+    ], danger: "Retirer le rôle" });
+    if (v === "__danger__") { if (p.email === S.me.email) return toast("Vous ne pouvez pas retirer votre propre rôle.", true); if (await confirmDlg(`Retirer tout accès à ${p.email} ? Le compte Supabase reste à supprimer dans Authentication.`, "Retirer")) { await sb.from("profils").delete().eq("email", p.email); await reload("profils"); } return; }
+    if (!v) return; if (p.email === S.me.email && v.role !== "admin") return toast("Vous ne pouvez pas retirer votre propre rôle équipe.", true);
+    const { error } = await sb.from("profils").update(v).eq("email", p.email); if (error) return toast(error.message, true);
+    await reload("profils"); toast("Compte mis à jour");
+  };
   A.copyLink = (d) => copy(checkinUrl(d.em), "Lien de pointage copié");
   A.copyEl = (d) => copy($("#" + d.el).textContent, "HTML copié");
   A.print = () => window.print();
@@ -687,7 +832,8 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
     await write("presences", "upsert", dedup, "emargement,participant"); toast(`${dedup.length} présence(s) importée(s)`);
   };
   A.saveCfg = async () => {
-    const rows = [{ cle: "checkin_url", valeur: $("#cfg_url").value.trim() }, { cle: "seuil_presence", valeur: Number($("#cfg_seuil").value) || 70 }, { cle: "categories_depenses", valeur: $("#cfg_cats").value.split("\n").map((s) => s.trim()).filter(Boolean) }];
+    const counts = {}; const check = $("#cfg_check").value.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => { const m = l.match(/^(avant|pendant|apres|après)\s*\|\s*(.+)$/i); if (!m) return null; const ph = m[1].toLowerCase().replace("après", "apres"); counts[ph] = (counts[ph] || 0) + 1; return { id: ph + counts[ph], phase: ph, libelle: m[2].trim() }; }).filter(Boolean);
+    const rows = [{ cle: "checkin_url", valeur: $("#cfg_url").value.trim() }, { cle: "seuil_presence", valeur: Number($("#cfg_seuil").value) || 70 }, { cle: "categories_depenses", valeur: $("#cfg_cats").value.split("\n").map((s) => s.trim()).filter(Boolean) }, { cle: "checklist", valeur: check }];
     const { error } = await sb.from("config").upsert(rows, { onConflict: "cle" }); if (error) return toast(error.message, true);
     await reload("config"); toast("Paramètres enregistrés");
   };
@@ -735,9 +881,11 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
   }
 
   /* ---------- Rendu & navigation ---------- */
-  function setView(v) { S.view = v; try { localStorage.setItem("me_view", v); } catch (_) {} render(); }
+  function setView(v) { S.view = v; try { localStorage.setItem("me_view_" + SPACE, v); } catch (_) {} render(); }
   function render() {
-    $$("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === S.view));
+    $$("#nav button").forEach((b) => { b.hidden = b.dataset.role === "admin" && !isAdmin(); b.classList.toggle("active", b.dataset.view === S.view); });
+    $$("[data-role=admin]:not(button)").forEach((el) => (el.hidden = !isAdmin()));
+    if (!isAdmin() && $(`#nav button[data-view="${S.view}"]`)?.dataset.role === "admin") S.view = "prof";
     try { $("#view").innerHTML = views[S.view](); } catch (e) { console.error(e); $("#view").innerHTML = `<div class="empty">Erreur d'affichage : ${esc(e.message)}</div>`; }
     const q = $("#view input[type=search]"); if (q && S.ui.focusSearch) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); S.ui.focusSearch = false; }
   }
@@ -762,9 +910,19 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
     if (!session) return;
     $("#who").textContent = session.user.email;
     try {
+      /* Rôle : lecture du profil ; sur une base vide, le premier compte connecté devient équipe. */
+      let { data: prof } = await sb.from("profils").select("*").ilike("email", session.user.email).maybeSingle();
+      if (!prof) {
+        const { data: created } = await sb.from("profils").insert({ email: session.user.email.toLowerCase(), nom: session.user.email.split("@")[0], role: "admin" }).select().maybeSingle();
+        prof = created || null;
+      }
+      if (!prof) { $("#view").innerHTML = `<div class="empty"><strong>Aucun rôle n'est attribué à ${esc(session.user.email)}.</strong><br>Demandez à l'équipe du programme de déclarer votre compte (Paramètres → Comptes &amp; rôles).</div>`; $("#nav").hidden = true; $(".topbar").hidden = true; return; }
+      S.me = prof; S.role = prof.role;
+      if (S.role !== "admin" && SPACE === "admin") { location.replace("prof.html"); return; }
+      $("#who").textContent = `${prof.nom || session.user.email} · ${S.role === "admin" ? "équipe" : "intervenant"}`;
       await loadAll();
-      try { const c = localStorage.getItem("me_cohorte"); if (c && (c === "all" || D.cohortes.some((x) => x.id === c))) { S.cohorte = c; $("#cohorte").value = c; } S.view = localStorage.getItem("me_view") || "dash"; } catch (_) {}
-      if (!views[S.view]) S.view = "dash";
+      try { const c = localStorage.getItem("me_cohorte"); if (c && (c === "all" || D.cohortes.some((x) => x.id === c))) { S.cohorte = c; $("#cohorte").value = c; } S.view = localStorage.getItem("me_view_" + SPACE) || (SPACE === "prof" ? "prof" : "dash"); } catch (_) {}
+      if (!views[S.view]) S.view = SPACE === "prof" ? "prof" : "dash";
       render();
     } catch (e) { $("#view").innerHTML = `<div class="empty">Impossible de charger les données : ${esc(e.message)}.<br>Vérifiez que supabase/schema.sql a été exécuté.</div>`; }
   }

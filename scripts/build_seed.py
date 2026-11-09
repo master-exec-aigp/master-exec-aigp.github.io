@@ -87,6 +87,16 @@ out.append("insert into config (cle, valeur) values")
 out.append(f"('certificats', {q(_j.dumps(CERTS, ensure_ascii=False))}::jsonb),")
 out.append("('categories_depenses', '[\"Honoraires intervenants\", \"Déplacements & hébergement\", \"Restauration\", \"Logistique & salles\", \"Communication & marketing\", \"Plateformes & licences\", \"Frais administratifs\", \"Coûts internes UM6P\", \"Autre\"]'::jsonb),")
 out.append("('seuil_presence', '70'::jsonb),")
+out.append("('checklist', '" + _j.dumps([
+    {"id":"avant1","phase":"avant","libelle":"Supports de cours transmis à l'équipe (J-7)"},
+    {"id":"avant2","phase":"avant","libelle":"Slide QR d'émargement insérée dans la présentation"},
+    {"id":"avant3","phase":"avant","libelle":"Besoins logistiques confirmés (salle, matériel, TP)"},
+    {"id":"pendant1","phase":"pendant","libelle":"QR code affiché et code annoncé — matin"},
+    {"id":"pendant2","phase":"pendant","libelle":"QR code affiché et code annoncé — après-midi"},
+    {"id":"pendant3","phase":"pendant","libelle":"Présences vérifiées en fin de journée"},
+    {"id":"apres1","phase":"apres","libelle":"Évaluation de la journée envoyée aux participants"},
+    {"id":"apres2","phase":"apres","libelle":"Supports finaux déposés sur Canvas"},
+    {"id":"apres3","phase":"apres","libelle":"Travaux et consignes communiqués aux participants"}], ensure_ascii=False).replace("'", "''") + "'::jsonb),")
 out.append("('checkin_url', '\"https://master-exec-aigp.github.io/checkin.html\"'::jsonb)")
 out.append("on conflict (cle) do nothing;")
 print("\n".join(out))
