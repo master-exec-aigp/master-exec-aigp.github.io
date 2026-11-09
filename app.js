@@ -27,11 +27,13 @@
   const STATUTS_S = ["Planifié", "Réalisé", "Reporté", "Annulé"];
   const HORAIRES = { S1: "09:00–10:30", S2: "10:45–12:15", S3: "14:00–15:30", S4: "15:45–17:15" };
 
-  const SPACE = document.body.dataset.space || "admin"; // "admin" (équipe) ou "prof" (intervenants)
-  const S = { view: SPACE === "prof" ? "prof" : "dash", cohorte: "all", data: {}, ui: {}, role: null, me: null };
+  const SPACE = document.body.dataset.space || "admin"; // "admin" (équipe), "prof" (intervenants) ou "etudiant"
+  const HOME = { admin: "dash", prof: "prof", etudiant: "etu_accueil" };
+  const S = { view: HOME[SPACE] || "dash", cohorte: "all", data: {}, ui: {}, role: null, me: null };
   const D = S.data;
   const views = {};
   const isAdmin = () => S.role === "admin";
+  const isEtudiant = () => S.role === "etudiant";
   const PHASES = [["avant", "Avant le cours"], ["pendant", "Pendant le cours"], ["apres", "Après le cours"]];
 
   /* ---------- Chargement ---------- */
@@ -50,10 +52,11 @@
   }
   async function loadAll() {
     const tables = isAdmin() ? ["cohortes", "participants", "seances", "emargements", "presences", "depenses", "recettes", "config", "profils", "checklist"]
+      : isEtudiant() ? ["cohortes", "participants", "seances", "emargements_min", "presences", "config"]
       : ["cohortes", "participants_min", "seances", "emargements", "presences", "config", "checklist"];
     const res = await Promise.all(tables.map((t) => fetchAll(t)));
-    tables.forEach((t, i) => (D[t === "participants_min" ? "participants" : t] = res[i]));
-    if (!isAdmin()) { D.depenses = []; D.recettes = []; D.profils = []; }
+    tables.forEach((t, i) => (D[t.replace("_min", "")] = res[i]));
+    if (!isAdmin()) { D.depenses = []; D.recettes = []; D.profils = []; D.checklist ||= []; }
     D.cfg = Object.fromEntries(D.config.map((c) => [c.cle, c.valeur]));
     D.cfg.checklist ||= [];
     D.participants.sort((a, b) => (a.nom + a.prenom).localeCompare(b.nom + b.prenom, "fr"));
@@ -428,7 +431,9 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
           html += `<div><h3 style="display:flex;justify-content:space-between">${lbl} <span class="pill ${p.done === p.total && p.total ? "ok" : ""}">${p.done}/${p.total}</span></h3>` +
             items.map((i) => { const t = j.ticks[i.id]; return `<label style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;cursor:pointer"><input type="checkbox" data-act="tick" data-key="${esc(j.key)}" data-item="${esc(i.id)}" ${t?.fait ? "checked" : ""} style="margin-top:4px"><span>${esc(i.libelle)}${t?.fait ? `<br><span class="small muted">${esc(t.fait_par || "")} · ${t.fait_le ? new Date(t.fait_le).toLocaleDateString("fr-FR") : ""}</span>` : ""}</span></label>`; }).join("") + `</div>`;
         });
-        html += `</div><div class="toolbar" style="margin:14px 0 0"><span class="small muted">Séances : ${esc(uniq(j.seances.map((s) => s.cours).filter(Boolean)).join(" / ") || "intitulés à préciser")}</span><span class="grow"></span>` +
+        const sup = j.seances.find((s) => s.supports)?.supports || "";
+        html += `</div><form class="toolbar" data-supports="${esc(j.key)}" style="margin:14px 0 0"><label class="small muted" for="sup_${esc(j.key.replace("|", "_"))}">Lien vers les supports de cours (Canvas, Drive…) visible par les participants</label><input id="sup_${esc(j.key.replace("|", "_"))}" type="url" value="${esc(sup)}" placeholder="https://…" style="flex:1;min-width:220px;padding:6px 10px;border:1px solid var(--bord);border-radius:6px;background:var(--surface)"><button class="btn sm" type="submit">Enregistrer</button>${sup ? `<a class="btn sm" href="${esc(sup)}" target="_blank" rel="noopener">Ouvrir ↗</a>` : ""}</form>
+          <div class="toolbar" style="margin:10px 0 0"><span class="small muted">Séances : ${esc(uniq(j.seances.map((s) => s.cours).filter(Boolean)).join(" / ") || "intitulés à préciser")}</span><span class="grow"></span>` +
           j.ems.map((e) => `<button class="btn sm primary" data-act="projeter" data-id="${esc(e.id)}" data-key="${esc(j.key)}">▣ QR code ${e.demi === "AM" ? "matin" : "après-midi"}</button>`).join("") +
           j.ems.map((e) => `<button class="btn sm" data-act="go" data-view="pointage" data-em="${esc(e.id)}">Pointage ${e.demi === "AM" ? "matin" : "après-midi"} (${D.presences.filter((p) => p.emargement === e.id && p.statut === "Présent").length})</button>`).join("") +
           `<button class="btn sm" data-act="goKit" data-key="${esc(j.key)}">Slides à insérer</button></div></div>`;
@@ -459,6 +464,70 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
             <p class="muted" style="margin-top:14px;word-break:break-all">${esc(checkinUrl(em.id).replace(/^https?:\/\//, ""))}</p>
           </div></div></div>`;
   };
+
+  /* ---------- Espace étudiant ---------- */
+  const moi = () => D.participants.find((p) => norm(p.email) === norm(S.me?.email)) || D.participants[0];
+  const etuJours = () => { const p = moi(); if (!p) return []; return journees().filter((j) => j.cohorte === p.cohorte); };
+  const presenceDe = (emId) => { const p = moi(); return D.presences.find((x) => x.emargement === emId && x.participant === p?.id); };
+  const fenetre = (e) => e.ouvert || (e.date && Math.abs((new Date(e.date + "T00:00:00") - new Date(today() + "T00:00:00")) / 864e5) <= 1);
+  views.etu_accueil = () => {
+    const p = moi();
+    if (!p) return `<div class="empty"><strong>Aucune fiche participant n'est associée à ${esc(S.me?.email || "")}.</strong><br>Contactez l'équipe du programme pour qu'elle enregistre votre adresse e-mail.</div>`;
+    const coh = D.cohortes.find((c) => c.id === p.cohorte);
+    const t = tauxParticipant(p); const seuil = D.cfg.seuil_presence / 100;
+    const js = etuJours(); const aPointer = D.emargements.filter((e) => e.cohorte === p.cohorte && fenetre(e));
+    const prochains = js.filter((j) => j.date && j.date >= today()).slice(0, 4);
+    let html = `<h1>Bonjour ${esc(p.prenom)}</h1><p class="muted">${esc(coh ? coh.libelle : p.cohorte)} · Executive Master in AI Governance &amp; Practice</p>`;
+    html += `<div class="card" style="border-color:var(--bleu)"><h2>Pointer ma présence</h2>` + (aPointer.length ? `<p class="small muted">Saisissez le code à 4 chiffres affiché par l'intervenant.</p><div class="att-grid">` +
+      aPointer.map((e) => { const pr = presenceDe(e.id); return `<div class="att" style="flex-direction:column;align-items:stretch"><div><strong>${e.demi === "AM" ? "Matin" : "Après-midi"}</strong> · ${esc(fmtDate(e.date))}<br><span class="small muted">${esc(uniq(seancesOf(e.id).map((s) => s.cours).filter(Boolean)).join(" / ") || certLbl(e.certificat))}</span></div>` +
+        (pr?.statut === "Présent" ? `<span class="pill ok" style="align-self:flex-start">✓ Présence enregistrée${pr.horodatage ? " à " + new Date(pr.horodatage).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : ""}</span>`
+          : `<form data-etu-em="${esc(e.id)}" style="display:flex;gap:8px"><input class="mono" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="Code" required style="width:110px;padding:8px;border:1px solid var(--bord);border-radius:6px;background:var(--surface);letter-spacing:.3em;text-align:center"><button class="btn primary" type="submit">Pointer</button></form>`) + `</div>`; }).join("") + `</div>`
+      : `<p class="muted">Aucune séance aujourd'hui. Le pointage s'ouvre le jour de la séance.</p>`) + `</div>`;
+    html += `<div class="tiles"><div class="tile"><div class="lbl">Présence globale</div><div class="val" style="color:${t.total.tenues && t.total.pres / t.total.tenues < seuil ? "var(--critique)" : "inherit"}">${pct(t.total.tenues ? t.total.pres / t.total.tenues : null)}</div><div class="sub">${t.total.pres} h sur ${t.total.tenues} h tenues · seuil ${D.cfg.seuil_presence} %</div></div>` +
+      Object.entries(D.cfg.certificats).filter(([c]) => t.parCert[c]?.tenues).map(([c, l]) => { const x = t.parCert[c]; return `<div class="tile"><div class="lbl">${c} · ${esc(l)}</div><div class="val" style="font-size:1.2rem">${pct(x.pres / x.tenues)}</div><div class="sub">${x.pres} h / ${x.tenues} h</div></div>`; }).join("") + `</div>`;
+    html += `<div class="card"><h2>Prochaines journées</h2>` + (prochains.length ? table([
+      { h: "Date", f: (j) => fmtDate(j.date, true) }, { h: "Certificat", f: (j) => esc(certLbl(j.certificat)) },
+      { h: "Cours", f: (j) => esc(uniq(j.seances.map((s) => s.cours).filter(Boolean)).join(" / ") || "—") }, { h: "Intervenant", f: (j) => esc(j.intervenants.join(", ")) },
+      { h: "Supports", f: (j) => { const u = j.seances.find((s) => s.supports)?.supports; return u ? `<a href="${esc(u)}" target="_blank" rel="noopener">Ouvrir ↗</a>` : '<span class="muted">—</span>'; } },
+    ], prochains) : '<p class="muted">Aucune journée datée à venir.</p>') + `</div>`;
+    return html;
+  };
+  views.etu_presences = () => {
+    const p = moi(); if (!p) return views.etu_accueil();
+    const ems = D.emargements.filter((e) => e.cohorte === p.cohorte && e.date && e.date <= today()).sort((a, b) => b.date.localeCompare(a.date) || b.demi.localeCompare(a.demi));
+    return `<h1>Mes présences</h1><p class="small muted">Une ligne par demi-journée passée. Les absences excusées sont signalées à l'équipe ; elles ne comptent pas comme présence.</p>` + table([
+      { h: "Date", f: (e) => `${fmtDate(e.date)} · ${e.demi === "AM" ? "matin" : "après-midi"}` }, { h: "Certificat", f: (e) => esc(e.certificat) },
+      { h: "Cours", f: (e) => esc(uniq(seancesOf(e.id).map((s) => s.cours).filter(Boolean)).join(" / ") || "—") },
+      { h: "Heures", num: true, f: (e) => heuresEm(e.id) || "—" },
+      { h: "Statut", f: (e) => { const pr = presenceDe(e.id); const st = pr?.statut; return `<span class="pill ${st === "Présent" ? "ok" : st === "Excusé" ? "warn" : heuresEm(e.id) ? "bad" : ""}">${esc(st || (heuresEm(e.id) ? "Absent" : "—"))}</span>`; } },
+    ], ems);
+  };
+  views.etu_planning = () => {
+    const p = moi(); if (!p) return views.etu_accueil();
+    const js = etuJours(); let last = null, html = `<h1>Planning · ${esc((D.cohortes.find((c) => c.id === p.cohorte) || {}).libelle || p.cohorte)}</h1>`;
+    js.forEach((j) => {
+      if (j.certificat !== last) { last = j.certificat; html += `<h2 style="margin-top:18px">${esc(certLbl(last))}</h2>`; }
+      const u = j.seances.find((s) => s.supports)?.supports;
+      html += `<div class="jour"><header><strong>Jour ${j.jour}</strong><span>${esc(fmtDate(j.date, true))}</span><span class="muted small">${esc(j.intervenants.join(", "))}</span><span style="flex:1"></span>${u ? `<a class="btn sm" href="${esc(u)}" target="_blank" rel="noopener">Supports ↗</a>` : ""}</header>` +
+        j.seances.map((s) => `<div class="creneau"><span class="mono muted">${esc(s.creneau)}</span><span>${esc(s.cours || "—")}<span class="small muted"> · ${esc(HORAIRES[s.creneau] || "")}</span></span><span></span><span></span></div>`).join("") + `</div>`;
+    });
+    return html;
+  };
+  document.addEventListener("submit", async (e) => {
+    const fs = e.target.closest("form[data-supports]");
+    if (fs) {
+      e.preventDefault(); const [cohorte, jour] = fs.dataset.supports.split("|"); const url = fs.querySelector("input").value.trim();
+      const { error } = await sb.from("seances").update({ supports: url }).eq("cohorte", cohorte).eq("jour", +jour);
+      if (error) return toast(error.message, true);
+      await reload("seances"); toast(url ? "Lien des supports enregistré" : "Lien retiré"); return;
+    }
+    const f = e.target.closest("form[data-etu-em]"); if (!f) return;
+    e.preventDefault(); const btn = f.querySelector("button"); btn.disabled = true;
+    const { data, error } = await sb.rpc("checkin_me", { p_emargement: f.dataset.etuEm, p_code: f.querySelector("input").value.trim() });
+    btn.disabled = false;
+    if (error) return toast(/P0001|incorrect/i.test(error.code + error.message) ? "Code incorrect." : /P0002/.test(error.code + error.message) ? "Le pointage de cette séance n'est pas ouvert." : error.message, true);
+    toast(`Présence enregistrée : ${data}`); D.presences = await fetchAll("presences"); render();
+  });
 
   /* ---------- Vue : suivi intervenants (admin) ---------- */
   views.suivi = () => {
@@ -913,16 +982,25 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
       /* Rôle : lecture du profil ; sur une base vide, le premier compte connecté devient équipe. */
       let { data: prof } = await sb.from("profils").select("*").ilike("email", session.user.email).maybeSingle();
       if (!prof) {
+        /* Étudiant : une fiche participant porte cette adresse (RLS ne renvoie que la sienne). */
+        const { data: fiche } = await sb.from("participants").select("id,nom,prenom,email,cohorte").ilike("email", session.user.email).maybeSingle();
+        if (fiche) prof = { email: session.user.email, nom: `${fiche.prenom} ${fiche.nom}`.trim(), role: "etudiant", intervenant: "" };
+      }
+      if (!prof) {
         const { data: created } = await sb.from("profils").insert({ email: session.user.email.toLowerCase(), nom: session.user.email.split("@")[0], role: "admin" }).select().maybeSingle();
         prof = created || null;
       }
-      if (!prof) { $("#view").innerHTML = `<div class="empty"><strong>Aucun rôle n'est attribué à ${esc(session.user.email)}.</strong><br>Demandez à l'équipe du programme de déclarer votre compte (Paramètres → Comptes &amp; rôles).</div>`; $("#nav").hidden = true; $(".topbar").hidden = true; return; }
+      if (!prof) { $("#view").innerHTML = `<div class="empty"><strong>Aucun rôle n'est attribué à ${esc(session.user.email)}.</strong><br>Demandez à l'équipe du programme de déclarer votre compte (Paramètres → Comptes &amp; rôles) ou d'enregistrer votre adresse sur votre fiche participant.</div>`; $("#nav").hidden = true; $(".topbar").hidden = true; return; }
       S.me = prof; S.role = prof.role;
-      if (S.role !== "admin" && SPACE === "admin") { location.replace("prof.html"); return; }
-      $("#who").textContent = `${prof.nom || session.user.email} · ${S.role === "admin" ? "équipe" : "intervenant"}`;
+      const PAGE = { admin: "admin.html", intervenant: "prof.html", etudiant: "etudiant.html" };
+      const allowed = S.role === "admin" || (S.role === "intervenant" && SPACE === "prof") || (S.role === "etudiant" && SPACE === "etudiant");
+      if (!allowed) { location.replace(PAGE[S.role]); return; }
+      if (isEtudiant()) $(".topbar .scope").hidden = true;
+      $("#who").textContent = `${prof.nom || session.user.email} · ${{ admin: "équipe", intervenant: "intervenant", etudiant: "participant" }[S.role]}`;
       await loadAll();
-      try { const c = localStorage.getItem("me_cohorte"); if (c && (c === "all" || D.cohortes.some((x) => x.id === c))) { S.cohorte = c; $("#cohorte").value = c; } S.view = localStorage.getItem("me_view_" + SPACE) || (SPACE === "prof" ? "prof" : "dash"); } catch (_) {}
-      if (!views[S.view]) S.view = SPACE === "prof" ? "prof" : "dash";
+      try { const c = localStorage.getItem("me_cohorte"); if (c && (c === "all" || D.cohortes.some((x) => x.id === c))) { S.cohorte = c; $("#cohorte").value = c; } S.view = localStorage.getItem("me_view_" + SPACE) || HOME[SPACE]; } catch (_) {}
+      if (isEtudiant()) S.cohorte = "all";
+      if (!views[S.view]) S.view = HOME[SPACE];
       render();
     } catch (e) { $("#view").innerHTML = `<div class="empty">Impossible de charger les données : ${esc(e.message)}.<br>Vérifiez que supabase/schema.sql a été exécuté.</div>`; }
   }
@@ -932,6 +1010,18 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
     const { error } = await sb.auth.signInWithPassword({ email: $("#email").value.trim(), password: $("#password").value });
     if (error) { $("#loginErr").textContent = /Invalid/i.test(error.message) ? "E-mail ou mot de passe incorrect." : error.message; $("#loginErr").hidden = false; }
   });
+  /* Création de compte (espace étudiant / intervenant) : acceptée seulement pour une adresse connue, contrôle fait en base. */
+  const su = $("#signupForm");
+  if (su) {
+    $("#showSignup")?.addEventListener("click", (e) => { e.preventDefault(); su.hidden = false; $("#loginForm").hidden = true; });
+    $("#showLogin")?.addEventListener("click", (e) => { e.preventDefault(); su.hidden = true; $("#loginForm").hidden = false; });
+    su.addEventListener("submit", async (e) => {
+      e.preventDefault(); const msg = $("#signupMsg"); msg.hidden = true;
+      const { data, error } = await sb.auth.signUp({ email: $("#suEmail").value.trim(), password: $("#suPassword").value });
+      if (error) { msg.className = "err small"; msg.textContent = /non reconnue|Database error/i.test(error.message) ? "Adresse e-mail non reconnue : utilisez l'adresse communiquée à l'équipe du programme." : error.message; msg.hidden = false; return; }
+      msg.className = "small"; msg.style.color = "var(--ok)"; msg.textContent = data.session ? "Compte créé, connexion en cours…" : "Compte créé. Un e-mail de confirmation vous a été envoyé : cliquez sur le lien, puis connectez-vous."; msg.hidden = false;
+    });
+  }
   sb.auth.onAuthStateChange((_ev, session) => start(session));
   sb.auth.getSession().then(({ data }) => start(data.session));
 })();

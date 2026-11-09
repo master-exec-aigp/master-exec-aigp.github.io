@@ -50,8 +50,10 @@ create table if not exists seances (
   cours text default '',
   intervenant text default '',
   statut text not null default 'Planifié', -- Planifié / Réalisé / Reporté / Annulé
-  emargement text references emargements(id)
+  emargement text references emargements(id),
+  supports text default ''                 -- lien vers les supports de cours (Canvas, Drive…)
 );
+alter table seances add column if not exists supports text default '';
 create index if not exists seances_cohorte_idx on seances(cohorte);
 
 create table if not exists presences (
@@ -129,7 +131,13 @@ create table if not exists checklist (
 
 create or replace function app_role() returns text
 language sql stable security definer set search_path = public as $$
-  select role from profils where lower(email) = lower(coalesce(auth.email(), ''))
+  select coalesce(
+    (select role from profils where lower(email) = lower(coalesce(auth.email(), ''))),
+    (select 'etudiant' from participants where lower(email) = lower(coalesce(auth.email(), '')) limit 1))
+$$;
+create or replace function mon_participant() returns uuid
+language sql stable security definer set search_path = public as $$
+  select id from participants where lower(email) = lower(coalesce(auth.email(), '')) order by created_at limit 1
 $$;
 create or replace function app_intervenant() returns text
 language sql stable security definer set search_path = public as $$
@@ -147,6 +155,12 @@ create or replace function mon_emargement(p_em text) returns boolean
 language sql stable security definer set search_path = public as $$
   select exists (select 1 from emargements e where e.id = p_em and (est_mon_cours(e.intervenant) or ma_journee(e.cohorte, e.jour)))
 $$;
+
+-- Vue des demi-journées sans le code de séance (étudiants).
+create or replace view emargements_min as
+  select id, cohorte, certificat, jour, date, demi, intervenant from emargements;
+revoke all on emargements_min from anon;
+grant select on emargements_min to authenticated;
 
 -- Vue minimale des participants pour les intervenants (pas de coordonnées ni de finances).
 create or replace view participants_min as
@@ -204,12 +218,54 @@ create policy interv_presences_maj on presences for update to authenticated usin
 drop policy if exists interv_checklist on checklist;
 create policy interv_checklist on checklist for all to authenticated using (ma_journee(cohorte, jour)) with check (ma_journee(cohorte, jour));
 
+-- Étudiants : leur fiche et leurs présences
+drop policy if exists etudiant_fiche on participants;
+create policy etudiant_fiche on participants for select to authenticated using (lower(email) = lower(coalesce(auth.email(), '')));
+drop policy if exists etudiant_presences on presences;
+create policy etudiant_presences on presences for select to authenticated using (participant = mon_participant());
+
 -- Profils : chacun lit le sien ; le premier compte connecté sur une table vide devient admin.
 drop policy if exists profil_propre on profils;
 create policy profil_propre on profils for select to authenticated using (lower(email) = lower(coalesce(auth.email(), '')));
 drop policy if exists profil_amorcage on profils;
 create policy profil_amorcage on profils for insert to authenticated
   with check (lower(email) = lower(coalesce(auth.email(), '')) and role = 'admin' and not exists (select 1 from profils));
+
+-- Inscription libre limitée aux adresses connues (participants et comptes déclarés).
+-- Tant qu'aucun profil n'existe, toute création est acceptée (amorçage du premier compte équipe).
+create or replace function verifier_inscription() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if exists (select 1 from profils)
+     and not exists (select 1 from participants where lower(email) = lower(new.email))
+     and not exists (select 1 from profils where lower(email) = lower(new.email)) then
+    raise exception 'Adresse e-mail non reconnue : contactez l''équipe du programme.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists verifier_inscription on auth.users;
+create trigger verifier_inscription before insert on auth.users for each row execute function verifier_inscription();
+
+-- Pointage depuis l'espace étudiant : l'identité vient du compte connecté, seul le code est saisi.
+create or replace function checkin_me(p_emargement text, p_code text)
+returns text
+language plpgsql security definer set search_path = public as $$
+declare e emargements%rowtype; p participants%rowtype;
+begin
+  select * into p from participants where id = mon_participant();
+  if not found then raise exception 'Aucune fiche participant pour ce compte' using errcode = 'P0003'; end if;
+  select * into e from emargements where emargements.id = p_emargement;
+  if not found or e.code <> p_code then raise exception 'Code de séance incorrect' using errcode = 'P0001'; end if;
+  if e.cohorte <> p.cohorte then raise exception 'Cette séance ne concerne pas votre cohorte' using errcode = 'P0003'; end if;
+  if not e.ouvert and (e.date is null or abs(current_date - e.date) > 1) then
+    raise exception 'Le pointage de cette séance n''est pas ouvert' using errcode = 'P0002';
+  end if;
+  insert into presences (emargement, participant, statut, source)
+  values (p_emargement, p.id, 'Présent', 'qr')
+  on conflict (emargement, participant) do update set statut = 'Présent', source = 'qr', horodatage = now();
+  return p.prenom || ' ' || p.nom;
+end $$;
+grant execute on function checkin_me(text, text) to authenticated;
 
 -- Pointage : la liste des participants n'est renvoyée que si le code est bon.
 create or replace function checkin_participants(p_emargement text, p_code text)
