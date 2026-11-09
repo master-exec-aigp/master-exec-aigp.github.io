@@ -1065,6 +1065,9 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
     $$("#nav button").forEach((b) => { b.hidden = b.dataset.role === "admin" && !isAdmin(); b.classList.toggle("active", b.dataset.view === S.view); });
     $$("[data-role=admin]:not(button)").forEach((el) => (el.hidden = !isAdmin()));
     if (!isAdmin() && $(`#nav button[data-view="${S.view}"]`)?.dataset.role === "admin") S.view = "prof";
+    /* Un étudiant ne voit que ses vues (accueil, présences, dossier, planning sans émargement) ; un intervenant jamais les vues équipe. */
+    if (isEtudiant() && !S.view.startsWith("etu_")) S.view = "etu_accueil";
+    if (S.role === "intervenant" && !["prof", "planning", "pointage", "kit", "projeter"].includes(S.view)) S.view = "prof";
     try { $("#view").innerHTML = views[S.view](); } catch (e) { console.error(e); $("#view").innerHTML = `<div class="empty">Erreur d'affichage : ${esc(e.message)}</div>`; }
     const q = $("#view input[type=search]"); if (q && S.ui.focusSearch) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); S.ui.focusSearch = false; }
   }
