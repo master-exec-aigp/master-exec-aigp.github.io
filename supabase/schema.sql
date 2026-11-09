@@ -26,6 +26,31 @@ create table if not exists participants (
   created_at timestamptz not null default now()
 );
 create index if not exists participants_cohorte_idx on participants(cohorte);
+-- Dossier administratif
+alter table participants add column if not exists telephone text default '';
+alter table participants add column if not exists cin text default '';
+alter table participants add column if not exists date_naissance date;
+alter table participants add column if not exists adresse text default '';
+alter table participants add column if not exists diplome text default '';
+alter table participants add column if not exists financeur text default '';          -- entreprise ou organisme payeur
+alter table participants add column if not exists financeur_contact text default '';  -- contact (nom, e-mail, téléphone)
+alter table participants add column if not exists prise_en_charge numeric not null default 0; -- part financée par l'entreprise (MAD)
+alter table participants add column if not exists convention boolean not null default false; -- convention / bon de commande signé
+alter table participants add column if not exists statut_dossier text not null default 'Incomplet'; -- Incomplet / Complet
+
+-- Documents du dossier (fichiers dans le bucket Storage « dossiers », chemin <participant>/<fichier>)
+create table if not exists documents (
+  id uuid primary key default gen_random_uuid(),
+  participant uuid not null references participants(id) on delete cascade,
+  type text not null default 'Autre',      -- CIN / Passeport / Diplôme / CV / Photo / Contrat / Convention de financement / Attestation / Autre
+  nom text not null,
+  chemin text not null,
+  taille int not null default 0,
+  ajoute_le timestamptz not null default now(),
+  ajoute_par text default '',
+  notes text default ''
+);
+create index if not exists documents_participant_idx on documents(participant);
 
 create table if not exists emargements (
   id text primary key,                 -- C4-J01-AM
@@ -184,10 +209,11 @@ alter table recettes     enable row level security;
 alter table config       enable row level security;
 alter table profils      enable row level security;
 alter table checklist    enable row level security;
+alter table documents    enable row level security;
 
 do $$ declare t text;
 begin
-  foreach t in array array['cohortes','participants','emargements','seances','presences','depenses','recettes','config','profils','checklist'] loop
+  foreach t in array array['cohortes','participants','emargements','seances','presences','depenses','recettes','config','profils','checklist','documents'] loop
     execute format('drop policy if exists equipe_tout on %I', t);
     execute format('drop policy if exists admin_tout on %I', t);
     execute format('create policy admin_tout on %I for all to authenticated using (app_role() = ''admin'') with check (app_role() = ''admin'')', t);
@@ -221,6 +247,8 @@ create policy interv_checklist on checklist for all to authenticated using (ma_j
 -- Étudiants : leur fiche et leurs présences
 drop policy if exists etudiant_fiche on participants;
 create policy etudiant_fiche on participants for select to authenticated using (lower(email) = lower(coalesce(auth.email(), '')));
+drop policy if exists etudiant_documents on documents;
+create policy etudiant_documents on documents for select to authenticated using (participant = mon_participant());
 drop policy if exists etudiant_presences on presences;
 create policy etudiant_presences on presences for select to authenticated using (participant = mon_participant());
 
@@ -230,6 +258,16 @@ create policy profil_propre on profils for select to authenticated using (lower(
 drop policy if exists profil_amorcage on profils;
 create policy profil_amorcage on profils for insert to authenticated
   with check (lower(email) = lower(coalesce(auth.email(), '')) and role = 'admin' and not exists (select 1 from profils));
+
+-- Stockage des documents : bucket privé « dossiers ». L'équipe gère tout ; un participant lit son propre dossier.
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('dossiers', 'dossiers', false, 20971520) on conflict (id) do nothing;
+drop policy if exists dossiers_admin on storage.objects;
+create policy dossiers_admin on storage.objects for all to authenticated
+  using (bucket_id = 'dossiers' and app_role() = 'admin') with check (bucket_id = 'dossiers' and app_role() = 'admin');
+drop policy if exists dossiers_etudiant on storage.objects;
+create policy dossiers_etudiant on storage.objects for select to authenticated
+  using (bucket_id = 'dossiers' and (storage.foldername(name))[1] = mon_participant()::text);
 
 -- Inscription libre limitée aux adresses connues (participants et comptes déclarés).
 -- Tant qu'aucun profil n'existe, toute création est acceptée (amorçage du premier compte équipe).

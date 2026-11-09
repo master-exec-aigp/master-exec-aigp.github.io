@@ -40,6 +40,10 @@ Par journée de cours, trois phases dont les éléments sont modifiables dans *P
 - Le pointage n'est accepté que le jour de la séance (± 1 jour), sauf si la demi-journée est marquée « ouverte » dans l'espace équipe.
 - Complément manuel : vue *Pointage* (présent / absent / excusé), import CSV d'un export Canvas Roll Call ou d'un formulaire.
 
+## Dossier administratif des participants
+
+Depuis *Participants → Dossier*, l'équipe tient pour chaque participant : identité et coordonnées, dernier diplôme, mode de financement (frais, remise, montant pris en charge par l'organisme, financeur et contact, convention signée), recettes liées, taux de présence par certificat, et les **documents personnels** (CIN, diplôme, CV, contrat, convention, justificatifs…) déposés dans le stockage privé Supabase (bucket `dossiers`, 20 Mo par fichier). Le participant consulte son propre dossier en lecture seule dans son espace. Exports Excel : un dossier individuel (fiche, financement, documents, présences), tous les dossiers de la cohorte (*Exporter les dossiers*), ou le classeur complet depuis la vue P&L.
+
 ## Intégration Canvas
 
 Canvas supprime le JavaScript des pages mais accepte les iframes. Dans *Paramètres & Canvas* de l'espace équipe, copier l'extrait :

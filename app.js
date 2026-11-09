@@ -51,12 +51,12 @@
     return out;
   }
   async function loadAll() {
-    const tables = isAdmin() ? ["cohortes", "participants", "seances", "emargements", "presences", "depenses", "recettes", "config", "profils", "checklist"]
-      : isEtudiant() ? ["cohortes", "participants", "seances", "emargements_min", "presences", "config"]
+    const tables = isAdmin() ? ["cohortes", "participants", "seances", "emargements", "presences", "depenses", "recettes", "config", "profils", "checklist", "documents"]
+      : isEtudiant() ? ["cohortes", "participants", "seances", "emargements_min", "presences", "config", "documents"]
       : ["cohortes", "participants_min", "seances", "emargements", "presences", "config", "checklist"];
     const res = await Promise.all(tables.map((t) => fetchAll(t)));
     tables.forEach((t, i) => (D[t.replace("_min", "")] = res[i]));
-    if (!isAdmin()) { D.depenses = []; D.recettes = []; D.profils = []; D.checklist ||= []; }
+    if (!isAdmin()) { D.depenses = []; D.recettes = []; D.profils = []; D.checklist ||= []; D.documents ||= []; }
     D.cfg = Object.fromEntries(D.config.map((c) => [c.cle, c.valeur]));
     D.cfg.checklist ||= [];
     D.participants.sort((a, b) => (a.nom + a.prenom).localeCompare(b.nom + b.prenom, "fr"));
@@ -237,6 +237,12 @@
     { k: "fonction", label: "Fonction", value: p.fonction },
     { k: "financement", label: "Financement", type: "select", options: FINANCEMENTS, value: p.financement || "Individuel" },
     { k: "frais", label: "Frais d'inscription (MAD)", type: "number", value: p.frais ?? 0, step: "1" }, { k: "remise", label: "Remise (MAD)", type: "number", value: p.remise ?? 0, step: "1" },
+    { k: "financeur", label: "Organisme financeur", value: p.financeur }, { k: "financeur_contact", label: "Contact financeur", value: p.financeur_contact },
+    { k: "prise_en_charge", label: "Montant pris en charge (MAD)", type: "number", value: p.prise_en_charge ?? 0, step: "1" }, { k: "convention", label: "Convention / bon de commande signé", type: "checkbox", value: p.convention },
+    { k: "telephone", label: "Téléphone", value: p.telephone }, { k: "cin", label: "CIN / passeport", value: p.cin },
+    { k: "date_naissance", label: "Date de naissance", type: "date", value: p.date_naissance || "" }, { k: "diplome", label: "Dernier diplôme", value: p.diplome },
+    { k: "adresse", label: "Adresse", value: p.adresse, full: true },
+    { k: "statut_dossier", label: "Statut du dossier", type: "select", options: ["Incomplet", "Complet"], value: p.statut_dossier || "Incomplet" },
     { k: "notes", label: "Notes", type: "textarea", value: p.notes, full: true },
   ];
   views.participants = () => {
@@ -247,7 +253,7 @@
     return `<h1>Participants <span class="muted" style="font-weight:400;font-size:1rem">· ${esc(scopeLbl())}</span></h1>
       <div class="toolbar"><input type="search" id="pq" placeholder="Rechercher un nom, une organisation…" value="${esc(S.ui.pq || "")}" data-ui="pq">
       <select data-ui="pst"><option value="">Tous statuts</option>${STATUTS_P.map((s) => `<option ${st === s ? "selected" : ""}>${s}</option>`).join("")}</select>
-      <span class="grow"></span><button class="btn" data-act="copyNames">Copier la liste des noms</button><button class="btn" data-act="exportCsv" data-table="participants">CSV</button><button class="btn primary" data-act="addP">+ Participant</button></div>` +
+      <span class="grow"></span><button class="btn" data-act="copyNames">Copier la liste des noms</button><button class="btn" data-act="exportDossiers">Exporter les dossiers (xlsx)</button><button class="btn primary" data-act="addP">+ Participant</button></div>` +
       table([
         { h: "Nom", f: (p) => `<strong>${esc(pName(p))}</strong><br><span class="small muted">${esc(p.email || "")}</span>` },
         { h: "Cohorte", f: (p) => esc(p.cohorte) },
@@ -257,9 +263,46 @@
         { h: "Frais nets", num: true, f: (p) => mad((p.frais || 0) - (p.remise || 0)) },
         { h: "Facturé / encaissé", num: true, f: (p) => `${mad(facture(p))}<br><span class="small muted">${mad(encaisse(p))}</span>` },
         { h: "Présence", num: true, f: (p) => { const t = tauxParticipant(p).total; return t.tenues ? `<span class="pill ${t.pres / t.tenues >= D.cfg.seuil_presence / 100 ? "ok" : "bad"}">${pct(t.pres / t.tenues)}</span>` : '<span class="muted">—</span>'; } },
-        { h: "", cls: "actions", f: (p) => `<button class="btn sm" data-act="editP" data-id="${p.id}">Modifier</button>` },
-      ], rows, ["Total", rows.length + " participant(s)", "", "", "", mad(sum(rows, (p) => (p.frais || 0) - (p.remise || 0))), mad(sum(rows, facture)), "", ""]);
+        { h: "Dossier", f: (p) => { const n = D.documents.filter((d) => d.participant === p.id).length; return `<span class="pill ${p.statut_dossier === "Complet" ? "ok" : "warn"}">${esc(p.statut_dossier || "Incomplet")}</span> <span class="small muted">${n} doc.</span>`; } },
+        { h: "", cls: "actions", f: (p) => `<button class="btn sm primary" data-act="dossier" data-id="${p.id}">Dossier</button>` },
+      ], rows, ["Total", rows.length + " participant(s)", "", "", "", mad(sum(rows, (p) => (p.frais || 0) - (p.remise || 0))), mad(sum(rows, facture)), "", `${rows.filter((p) => p.statut_dossier === "Complet").length} complet(s)`, ""]);
   };
+
+  /* ---------- Vue : dossier administratif d'un participant ---------- */
+  const TYPES_DOC = ["CIN / Passeport", "Diplôme", "CV", "Photo", "Contrat de formation", "Convention de financement", "Bon de commande", "Attestation employeur", "Justificatif de paiement", "Autre"];
+  const fmtOctets = (n) => n > 1048576 ? (n / 1048576).toFixed(1) + " Mo" : Math.max(1, Math.round(n / 1024)) + " Ko";
+  const lbl = (k, v) => `<tr><td style="width:38%;background:var(--peche);font-weight:600">${k}</td><td>${v || '<span class="muted">—</span>'}</td></tr>`;
+  function dossierHtml(p, admin) {
+    const docs = D.documents.filter((d) => d.participant === p.id).sort((a, b) => b.ajoute_le.localeCompare(a.ajoute_le));
+    const rec = D.recettes.filter((r) => r.participant === p.id);
+    const t = tauxParticipant(p); const coh = D.cohortes.find((c) => c.id === p.cohorte);
+    const net = (p.frais || 0) - (p.remise || 0), part = Math.max(0, net - (p.prise_en_charge || 0));
+    let html = `<div class="toolbar">${admin ? `<button class="btn" data-act="go" data-view="participants">← Participants</button>` : ""}<h1 style="margin:0">${esc(pName(p))}</h1><span class="pill ${p.statut === "Actif" ? "ok" : "info"}">${esc(p.statut)}</span><span class="pill ${p.statut_dossier === "Complet" ? "ok" : "warn"}">Dossier ${esc((p.statut_dossier || "Incomplet").toLowerCase())}</span><span class="grow"></span>
+      ${admin ? `<button class="btn" data-act="editP" data-id="${p.id}">Modifier la fiche</button><button class="btn" data-act="exportDossier" data-id="${p.id}">Exporter (xlsx)</button>` : ""}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
+      <div class="card"><h2>Identité</h2><table class="plain"><tbody>${lbl("Cohorte", esc(coh ? coh.libelle : p.cohorte))}${lbl("E-mail", esc(p.email))}${lbl("Téléphone", esc(p.telephone))}${lbl("CIN / passeport", esc(p.cin))}${lbl("Date de naissance", p.date_naissance ? fmtDate(p.date_naissance) : "")}${lbl("Adresse", esc(p.adresse))}${lbl("Organisation", esc(p.organisation))}${lbl("Fonction", esc(p.fonction))}${lbl("Dernier diplôme", esc(p.diplome))}</tbody></table></div>
+      <div class="card"><h2>Financement</h2><table class="plain"><tbody>${lbl("Mode", esc(p.financement))}${lbl("Frais d'inscription", mad(p.frais))}${lbl("Remise", mad(p.remise))}${lbl("Net à facturer", `<strong>${mad(net)}</strong>`)}${lbl("Pris en charge par l'organisme", mad(p.prise_en_charge))}${lbl("Reste à charge du participant", mad(part))}${lbl("Organisme financeur", esc(p.financeur))}${lbl("Contact financeur", esc(p.financeur_contact))}${lbl("Convention / bon de commande", p.convention ? '<span class="pill ok">signé</span>' : '<span class="pill warn">en attente</span>')}</tbody></table>
+        ${admin ? `<h3 style="margin-top:14px">Recettes liées</h3>` + (rec.length ? table([{ h: "Date", f: (r) => fmtDate(r.date) }, { h: "Payeur", f: (r) => `${esc(r.payeur)} <span class="pill">${esc(r.type)}</span>` }, { h: "Facturé", num: true, f: (r) => mad(r.montant_facture) }, { h: "Encaissé", num: true, f: (r) => mad(r.montant_encaisse) }, { h: "Statut", f: (r) => { const [l, c] = recStatut(r); return `<span class="pill ${c}">${l}</span>`; } }, { h: "", cls: "actions", f: (r) => `<button class="btn sm" data-act="editR" data-id="${r.id}">Modifier</button>` }], rec, ["Total", "", mad(sum(rec, (r) => r.montant_facture)), mad(sum(rec, (r) => r.montant_encaisse)), "", ""]) : '<p class="muted small">Aucune recette enregistrée pour ce participant.</p>') + `<div class="toolbar" style="margin:8px 0 0"><button class="btn sm" data-act="addRFor" data-id="${p.id}">+ Recette pour ce participant</button></div>` : ""}</div>
+      <div class="card"><h2>Présence</h2><div class="tiles" style="margin-bottom:8px"><div class="tile"><div class="lbl">Global</div><div class="val">${pct(t.total.tenues ? t.total.pres / t.total.tenues : null)}</div><div class="sub">${t.total.pres} h / ${t.total.tenues} h tenues</div></div>${Object.entries(t.parCert).filter(([, x]) => x.tenues).map(([c, x]) => `<div class="tile"><div class="lbl">${c}</div><div class="val" style="font-size:1.2rem">${pct(x.pres / x.tenues)}</div><div class="sub">${x.pres} h / ${x.tenues} h</div></div>`).join("")}</div></div>
+      <div class="card"><h2>Documents</h2>${admin ? `<form id="docForm" class="toolbar" data-doc-for="${p.id}" style="margin:0 0 10px"><select name="type">${TYPES_DOC.map((x) => `<option>${x}</option>`).join("")}</select><input type="file" name="fichier" required style="flex:1;min-width:160px"><button class="btn primary sm" type="submit">Ajouter</button></form><p class="small muted">PDF, images ou documents Office, 20 Mo maximum par fichier. Stockage privé : seuls l'équipe et le participant concerné y accèdent.</p>` : ""}
+        ${docs.length ? `<div class="tablewrap"><table><thead><tr><th>Type</th><th>Fichier</th><th>Ajouté</th><th></th></tr></thead><tbody>` + docs.map((d) => `<tr><td>${esc(d.type)}</td><td>${esc(d.nom)}<br><span class="small muted">${fmtOctets(d.taille)}</span></td><td class="small muted">${fmtDate(d.ajoute_le.slice(0, 10))}${d.ajoute_par ? "<br>" + esc(d.ajoute_par) : ""}</td><td class="actions"><button class="btn sm" data-act="openDoc" data-id="${d.id}">Ouvrir</button>${admin ? `<button class="btn sm danger" data-act="delDoc" data-id="${d.id}">Supprimer</button>` : ""}</td></tr>`).join("") + `</tbody></table></div>` : '<p class="muted small">Aucun document.</p>'}</div>
+      ${p.notes ? `<div class="card"><h2>Notes</h2><p style="white-space:pre-wrap">${esc(p.notes)}</p></div>` : ""}</div>`;
+    return html;
+  }
+  views.dossier = () => { const p = pById(S.ui.part); return p ? dossierHtml(p, true) : `<div class="empty">Participant introuvable.</div>`; };
+  views.etu_dossier = () => { const p = moi(); return p ? `<h1>Mon dossier</h1><p class="small muted">Pour toute correction de vos informations ou ajout de document, contactez l'équipe du programme.</p>` + dossierHtml(p, false) : views.etu_accueil(); };
+  document.addEventListener("submit", async (e) => {
+    const f = e.target.closest("form[data-doc-for]"); if (!f) return;
+    e.preventDefault(); const file = f.elements.fichier.files[0]; if (!file) return;
+    const btn = f.querySelector("button"); btn.disabled = true;
+    const safe = file.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9._-]+/g, "_");
+    const chemin = `${f.dataset.docFor}/${Date.now()}_${safe}`;
+    const { error } = await sb.storage.from("dossiers").upload(chemin, file, { upsert: false });
+    if (error) { btn.disabled = false; return toast("Envoi impossible : " + error.message, true); }
+    const { error: e2 } = await sb.from("documents").insert({ participant: f.dataset.docFor, type: f.elements.type.value, nom: file.name, chemin, taille: file.size, ajoute_par: S.me?.nom || S.me?.email || "" });
+    btn.disabled = false; if (e2) return toast(e2.message, true);
+    await reload("documents"); toast("Document ajouté");
+  });
 
   /* ---------- Vue : séances ---------- */
   views.seances = () => {
@@ -742,11 +785,57 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
   A.copyEl = (d) => copy($("#" + d.el).textContent, "HTML copié");
   A.print = () => window.print();
   A.copyNames = () => copy(D.participants.filter(inScope).filter((p) => p.statut === "Actif").map(pName).join("\n"), "Liste copiée");
-  A.addP = async () => { const v = await openForm({ title: "Nouveau participant", fields: participantFields() }); if (v) await write("participants", "insert", v); };
+  A.addP = async () => { const v = await openForm({ title: "Nouveau participant", intro: "L'adresse e-mail saisie ici est celle avec laquelle le participant pourra créer son compte sur l'espace étudiants.", fields: participantFields() }); if (v) { v.email = (v.email || "").trim().toLowerCase(); await write("participants", "insert", v); } };
+  A.dossier = (d) => { S.ui.part = d.id; setView("dossier"); };
+  A.addRFor = async (d) => { const p = pById(d.id); const v = await recetteForm("Nouvelle recette", { cohorte: p.cohorte, participant: p.id, payeur: p.financement === "Entreprise" && p.financeur ? p.financeur : `${p.prenom} ${p.nom}`, type: p.financement === "Entreprise" ? "Entreprise" : "Participant", montant_facture: Math.max(0, (p.frais || 0) - (p.remise || 0)) }); if (v) { v.participant ||= null; await write("recettes", "insert", v); } };
+  A.openDoc = async (d) => {
+    const doc = D.documents.find((x) => x.id === d.id);
+    const { data, error } = await sb.storage.from("dossiers").createSignedUrl(doc.chemin, 120);
+    if (error) return toast("Ouverture impossible : " + error.message, true);
+    const a = document.createElement("a"); a.href = data.signedUrl; a.target = "_blank"; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove();
+  };
+  A.delDoc = async (d) => {
+    const doc = D.documents.find((x) => x.id === d.id);
+    if (!(await confirmDlg(`Supprimer définitivement « ${doc.nom} » ?`))) return;
+    const { error } = await sb.storage.from("dossiers").remove([doc.chemin]); if (error) return toast(error.message, true);
+    await write("documents", "delete", null, doc.id);
+  };
   A.editP = async (d) => {
     const p = pById(d.id); const v = await openForm({ title: "Modifier le participant", fields: participantFields(p), danger: "Supprimer" });
-    if (v === "__danger__") { if (await confirmDlg(`Supprimer ${pName(p)} ainsi que ses présences ? Les recettes liées sont conservées sans lien.`)) await write("participants", "delete", null, p.id); }
-    else if (v) await write("participants", "update", v, p.id);
+    if (v === "__danger__") {
+      const nd = D.documents.filter((x) => x.participant === p.id);
+      if (!(await confirmDlg(`Supprimer ${pName(p)}, ses présences et ses ${nd.length} document(s) ? Les recettes liées sont conservées sans lien. Cette action est définitive.`))) return;
+      if (nd.length) await sb.storage.from("dossiers").remove(nd.map((x) => x.chemin));
+      await write("participants", "delete", null, p.id); await reload("documents"); if (S.view === "dossier") setView("participants");
+    } else if (v) { v.email = (v.email || "").trim().toLowerCase(); v.date_naissance ||= null; await write("participants", "update", v, p.id); }
+  };
+  function dossierRows(parts) {
+    const pn = (p) => `${p.nom} ${p.prenom}`;
+    const fiche = parts.map((p) => { const t = tauxParticipant(p).total; const rec = D.recettes.filter((r) => r.participant === p.id); return {
+      Cohorte: p.cohorte, Nom: p.nom, Prénom: p.prenom, Statut: p.statut, "E-mail": p.email, Téléphone: p.telephone, "CIN / passeport": p.cin, "Date de naissance": p.date_naissance || "", Adresse: p.adresse, Organisation: p.organisation, Fonction: p.fonction, "Dernier diplôme": p.diplome,
+      Financement: p.financement, "Frais (MAD)": p.frais, "Remise (MAD)": p.remise, "Net (MAD)": (p.frais || 0) - (p.remise || 0), "Pris en charge (MAD)": p.prise_en_charge, "Reste à charge (MAD)": Math.max(0, (p.frais || 0) - (p.remise || 0) - (p.prise_en_charge || 0)), "Organisme financeur": p.financeur, "Contact financeur": p.financeur_contact, "Convention signée": p.convention ? "Oui" : "Non",
+      "Facturé (MAD)": sum(rec, (r) => r.montant_facture), "Encaissé (MAD)": sum(rec, (r) => r.montant_encaisse), "Reste à encaisser (MAD)": sum(rec, (r) => r.montant_facture - r.montant_encaisse),
+      "Présence (%)": t.tenues ? Math.round((t.pres / t.tenues) * 100) : "", "Heures présentes": t.pres, "Heures tenues": t.tenues, "Statut dossier": p.statut_dossier, "Nb documents": D.documents.filter((d) => d.participant === p.id).length, Notes: p.notes }; });
+    const ids = new Set(parts.map((p) => p.id));
+    const docs = D.documents.filter((d) => ids.has(d.participant)).map((d) => { const p = pById(d.participant); return { Cohorte: p?.cohorte, Participant: p ? pn(p) : "", Type: d.type, Fichier: d.nom, "Taille (Ko)": Math.round(d.taille / 1024), "Ajouté le": d.ajoute_le.slice(0, 10), "Ajouté par": d.ajoute_par, Notes: d.notes }; });
+    const recs = D.recettes.filter((r) => ids.has(r.participant)).map((r) => { const p = pById(r.participant); return { Cohorte: r.cohorte, Participant: p ? pn(p) : "", Date: r.date, Payeur: r.payeur, Type: r.type, Objet: r.objet, Facture: r.facture, "Facturé (MAD)": r.montant_facture, "Encaissé (MAD)": r.montant_encaisse, Échéance: r.echeance || "", Statut: recStatut(r)[0] }; });
+    return { fiche, docs, recs };
+  }
+  A.exportDossiers = () => {
+    const parts = D.participants.filter(inScope); const { fiche, docs, recs } = dossierRows(parts);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fiche), "Dossiers"); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(recs.length ? recs : [{}]), "Financement");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(docs.length ? docs : [{}]), "Documents");
+    download(`dossiers_${S.cohorte}_${today()}.xlsx`, new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })]));
+  };
+  A.exportDossier = (d) => {
+    const p = pById(d.id); const { fiche, docs, recs } = dossierRows([p]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(Object.entries(fiche[0])), "Dossier"); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(recs.length ? recs : [{}]), "Financement");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(docs.length ? docs : [{}]), "Documents");
+    const ems = D.emargements.filter((e) => e.cohorte === p.cohorte && e.date && e.date <= today()).map((e) => ({ Date: e.date, "Demi-journée": e.demi, Certificat: e.certificat, Heures: heuresEm(e.id), Statut: D.presences.find((x) => x.emargement === e.id && x.participant === p.id)?.statut || (heuresEm(e.id) ? "Absent" : "") }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ems.length ? ems : [{}]), "Présences");
+    download(`dossier_${norm(p.nom + "_" + p.prenom).replace(/ /g, "_")}_${today()}.xlsx`, new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })]));
   };
   A.addD = async () => { const v = await openForm({ title: "Nouvelle dépense", fields: depenseFields() }); if (v) await write("depenses", "insert", v); };
   A.editD = async (d) => {
@@ -926,7 +1015,9 @@ L'équipe du Master Exécutif AIGP — UM6P | AIM | UNESCO`;
     const { cols, lignes } = pnlData();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Compte de résultat", ...cols, "Total"], ...lignes.map((L) => [L.l, ...L.v.map((v) => v == null ? "" : L.pct ? Math.round(v * 1000) / 1000 : Math.round(v)), L.pct || L.l.includes("/ participant") ? "" : Math.round(sum(L.v))])]), "P&L");
     const pn = Object.fromEntries(D.participants.map((p) => [p.id, pName(p)]));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(D.participants.map(({ id, created_at, ...p }) => p)), "Participants");
+    const dr = dossierRows(D.participants);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dr.fiche), "Participants");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dr.docs.length ? dr.docs : [{}]), "Documents");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(D.recettes.map(({ id, participant, ...r }) => ({ ...r, participant: pn[participant] || "", statut: recStatut({ ...r })[0] }))), "Recettes");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(D.depenses.map(({ id, ...d }) => d)), "Dépenses");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(D.seances), "Séances");
